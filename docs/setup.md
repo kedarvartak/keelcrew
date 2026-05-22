@@ -12,7 +12,7 @@ chmod +x src/index.ts
 
 ## Wire into Claude Code
 
-Add to `~/.claude/claude_desktop_config.json` (or your project's `.claude/settings.json`):
+**Step 1 — Register the MCP server.** Add to your project's `.claude/settings.json`:
 
 ```json
 {
@@ -25,7 +25,32 @@ Add to `~/.claude/claude_desktop_config.json` (or your project's `.claude/settin
 }
 ```
 
+**Step 2 — Auto-inject memory via hook.** Claude Code runs `UserPromptSubmit` hooks before every prompt. Add this to `.claude/settings.json` alongside the MCP config:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /path/to/multi-agent-memo/scripts/inject-memory.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The script reads the last 30 messages from `AGENTS.md` and wraps them in `<agent_memory>` tags. Claude sees this context before every message — no tool call required.
+
+**Step 3 — Add `CLAUDE.md` to your project.** Copy the `CLAUDE.md` from this repo into your project root. Claude Code auto-loads it and the instructions tell Claude to write back to memory after completing work.
+
 ## Wire into Codex
+
+Codex CLI **natively reads `AGENTS.md`** at the project root before every session — no extra config needed for memory injection. Just register the MCP server so Codex can write back to it:
 
 Add to `~/.codex/config.json`:
 
@@ -40,9 +65,11 @@ Add to `~/.codex/config.json`:
 }
 ```
 
+Since Codex reads `AGENTS.md` natively, it will always see the full shared log automatically. It still uses the MCP tools to append new entries.
+
 ## Wire into Gemini CLI
 
-Add to `~/.gemini/settings.json`:
+**Step 1 — Register the MCP server.** Add to `~/.gemini/settings.json`:
 
 ```json
 {
@@ -54,6 +81,8 @@ Add to `~/.gemini/settings.json`:
   }
 }
 ```
+
+**Step 2 — Add `GEMINI.md` to your project.** Gemini CLI auto-loads `GEMINI.md` from the project root. Copy the `GEMINI.md` from this repo — it instructs Gemini to call `get_context` first and `append_message` after completing work.
 
 ## Usage Pattern
 

@@ -3,14 +3,16 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { appendMessage, getContext, readMemory, startSession } from "./memory.ts";
 
 const server = new Server(
   { name: "multi-agent-memo", version: "0.1.0" },
-  { capabilities: { tools: {} } }
+  { capabilities: { tools: {}, resources: {} } }
 );
 
 const tools = [
@@ -84,6 +86,41 @@ const tools = [
     },
   },
 ];
+
+// ── resources ─────────────────────────────────────────────────────────────────
+// Exposing AGENTS.md as an MCP resource lets clients that support proactive
+// resource loading (e.g. Claude Code) fetch it automatically without a tool call.
+// The URI encodes the repo_path so the client can request a specific project.
+
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+  resources: [
+    {
+      uri: "memo://agents-md",
+      name: "AGENTS.md — shared agent memory",
+      description:
+        "The full shared memory log for this project. Read this at session start to understand prior decisions and context from all agents.",
+      mimeType: "text/markdown",
+    },
+  ],
+}));
+
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const { uri } = request.params;
+  if (!uri.startsWith("memo://agents-md")) {
+    throw new Error(`Unknown resource: ${uri}`);
+  }
+  // repo_path passed as query param: memo://agents-md?path=/abs/path/to/repo
+  const repoPath = new URL(uri.replace("memo://", "http://placeholder/")).searchParams.get("path");
+  if (!repoPath) {
+    return {
+      contents: [{ uri, mimeType: "text/plain", text: "Provide ?path=/absolute/repo/path" }],
+    };
+  }
+  const content = readMemory(repoPath);
+  return { contents: [{ uri, mimeType: "text/markdown", text: content }] };
+});
+
+// ── tools ─────────────────────────────────────────────────────────────────────
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
