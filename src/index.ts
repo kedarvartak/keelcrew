@@ -16,7 +16,7 @@ import {
   searchMemory,
   startSession,
   summarizeSession,
-} from "./memory.ts";
+} from "./memory.js";
 
 const server = new Server(
   { name: "multi-agent-memo", version: "0.1.0" },
@@ -191,7 +191,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
-    let result: string | Record<string, unknown>;
+    let result: unknown;
 
     if (name === "start_session") {
       const parsed = z

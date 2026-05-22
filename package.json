@@ -3,20 +3,25 @@
   "version": "0.1.0",
   "description": "Shared memory MCP server for Claude, Codex, and Gemini CLI",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
-    "src",
-    "tsconfig.json",
+    "dist",
+    "scripts",
+    "CLAUDE.md",
+    "GEMINI.md",
     "README.md",
     "LICENSE"
   ],
   "bin": {
-    "multi-agent-memo": "src/index.ts"
+    "multi-agent-memo": "dist/index.js"
   },
   "scripts": {
-    "start": "node src/index.ts",
-    "dev": "node --watch src/index.ts",
-    "test": "node --test test/*.test.ts"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "mcp",
@@ -30,6 +35,10 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^5.7.0"
   },
   "engines": {
     "node": ">=22"
