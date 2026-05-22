@@ -41,6 +41,53 @@ A single MCP server that maintains a **shared conversation log** inside the proj
 - **MCP-native** — exposed as MCP tools so any compliant CLI can wire in with one config line.
 - **Repo-local** — the memory file lives in the project, so it versions with the code.
 
+## The Full Vision — Orchestration UI
+
+Shared memory solves the context problem. But you still have to open three terminals, switch between them, and manually route work. The next layer removes that entirely.
+
+The three CLIs run on your PC (where they're already installed and authenticated). A local HTTP server on the same machine spawns them as child processes and captures their output. A web UI — hosted at your own domain — talks to the local server through a **Cloudflare Tunnel**, giving it a stable public HTTPS URL without port-forwarding or a VPS.
+
+From your browser, anywhere:
+1. Type one prompt
+2. Choose which agents to send it to (or all three at once)
+3. Watch responses stream into side-by-side panels in real time
+4. See `AGENTS.md` update live as each agent writes its output
+
+```
+Browser (your domain, anywhere)
+      │
+      │  POST /dispatch
+      ▼
+Cloudflare Tunnel  (stable public HTTPS URL → your PC)
+      │
+      ▼
+Local HTTP Server (your PC, port 3131)
+      │
+      ├──► claude --print -p "..."  ──► stdout ──► AGENTS.md
+      ├──► codex exec "..."         ──► stdout ──► AGENTS.md
+      └──► gemini -p "..."          ──► stdout ──► AGENTS.md
+                                           │
+                          SSE stream ◄─────┘
+                                           │
+                                           ▼
+                                  Browser panels update live
+```
+
+The web UI is a static React app — hosted on Vercel or Netlify for free. It stores your tunnel URL in settings (one-time setup). The local server is protected by a `MEMO_SECRET` token so only your UI can reach it.
+
+### Dispatch Modes
+
+- **Parallel** — all three agents get the same prompt simultaneously. Use for "review this", "what's wrong here", "give me options".
+- **Sequential (pipeline)** — agents run in order, each receiving the previous agent's output as additional context. Example: Codex writes code → Claude reviews it → Gemini checks for regressions.
+- **Targeted** — send to just one agent. Useful when you know exactly who should handle the task.
+
+### What the UI Shows
+
+- **Dispatch panel** — prompt input, agent selector, mode toggle (parallel / sequential / targeted)
+- **Agent response panels** — one per agent, responses stream in as the CLI produces output
+- **Memory log** — live view of `AGENTS.md`, updates as agents write entries
+- **Dispatch history** — past dispatches with their outputs, filterable by agent or date
+
 ## Who This Is For
 
-Developers who run multiple AI coding assistants on the same project and want them to share context without manual copy-paste.
+Developers who run multiple AI coding assistants on the same project and want them to share context, be dispatched together, and be managed from a single interface — without switching tools or re-explaining decisions.

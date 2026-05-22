@@ -115,3 +115,22 @@ The `AGENTS.md` file will be created automatically at the root of your project r
 | `append_message` | Write one message line (agent or user) |
 | `read_memory` | Read full log, optionally filter by agent |
 | `get_context` | Get last N messages for context injection |
+| `search_memory` | Search recent or historical memory by keyword and optional tag |
+| `summarize_session` | Summarize a session into participants, decisions, blockers, and todos |
+| `get_decisions` | Extract only decision-type entries from memory |
+
+## Tags
+
+You can add inline tags directly in `append_message` content:
+
+```text
+#decision
+#blocker
+#todo
+```
+
+Example:
+
+```text
+append_message(repo_path="/your/project", agent="codex", persona="coder", speaker="me", message="Use Redis for persistence. #decision")
+```

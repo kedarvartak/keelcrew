@@ -31,3 +31,7 @@ The `AGENTS.md` log format is versioned independently as `format: N` in its head
 
 ### v0.1.0
 First version. No migration needed.
+
+### Next release
+- Adds `search_memory`, `summarize_session`, and `get_decisions`
+- Adds inline memory tags: `#decision`, `#blocker`, `#todo`

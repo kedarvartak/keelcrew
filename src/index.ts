@@ -8,7 +8,15 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { appendMessage, getContext, readMemory, startSession } from "./memory.ts";
+import {
+  appendMessage,
+  getContext,
+  getDecisions,
+  readMemory,
+  searchMemory,
+  startSession,
+  summarizeSession,
+} from "./memory.ts";
 
 const server = new Server(
   { name: "multi-agent-memo", version: "0.1.0" },
@@ -81,6 +89,61 @@ const tools = [
           type: "integer",
           description: "Number of recent messages to return. Defaults to 20.",
         },
+      },
+      required: ["repo_path"],
+    },
+  },
+  {
+    name: "search_memory",
+    description:
+      "Search the shared memory log by keyword, with optional agent, persona, and tag filtering.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repo_path: { type: "string", description: "Absolute path to the project repo." },
+        query: { type: "string", description: "Keyword query to search for." },
+        limit: { type: "integer", description: "Maximum results to return. Defaults to 10." },
+        filter_agent: { type: "string", description: "Optional. Only search this agent." },
+        filter_persona: { type: "string", description: "Optional. Only search this persona." },
+        filter_tag: {
+          type: "string",
+          enum: ["decision", "blocker", "todo"],
+          description: "Optional. Only search entries containing this tag.",
+        },
+      },
+      required: ["repo_path", "query"],
+    },
+  },
+  {
+    name: "summarize_session",
+    description:
+      "Summarize one session into participants, decisions, blockers, todos, and highlights.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repo_path: { type: "string", description: "Absolute path to the project repo." },
+        session_date: {
+          type: "string",
+          description: "Optional. Session date in YYYY-MM-DD. Defaults to the latest session.",
+        },
+      },
+      required: ["repo_path"],
+    },
+  },
+  {
+    name: "get_decisions",
+    description:
+      "Extract decision entries from the shared log using #decision tags and decision heuristics.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repo_path: { type: "string", description: "Absolute path to the project repo." },
+        session_date: {
+          type: "string",
+          description: "Optional. Restrict to a single session date in YYYY-MM-DD.",
+        },
+        filter_agent: { type: "string", description: "Optional. Only include this agent." },
+        filter_persona: { type: "string", description: "Optional. Only include this persona." },
       },
       required: ["repo_path"],
     },
@@ -166,6 +229,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         .object({ repo_path: z.string(), last_n: z.number().int().positive().optional() })
         .parse(args);
       result = getContext(parsed.repo_path, parsed.last_n ?? 20);
+    } else if (name === "search_memory") {
+      const parsed = z
+        .object({
+          repo_path: z.string(),
+          query: z.string(),
+          limit: z.number().int().positive().optional(),
+          filter_agent: z.string().optional(),
+          filter_persona: z.string().optional(),
+          filter_tag: z.enum(["decision", "blocker", "todo"]).optional(),
+        })
+        .parse(args);
+      result = searchMemory(
+        parsed.repo_path,
+        parsed.query,
+        parsed.limit ?? 10,
+        parsed.filter_agent,
+        parsed.filter_persona,
+        parsed.filter_tag
+      );
+    } else if (name === "summarize_session") {
+      const parsed = z
+        .object({ repo_path: z.string(), session_date: z.string().optional() })
+        .parse(args);
+      result = summarizeSession(parsed.repo_path, parsed.session_date);
+    } else if (name === "get_decisions") {
+      const parsed = z
+        .object({
+          repo_path: z.string(),
+          session_date: z.string().optional(),
+          filter_agent: z.string().optional(),
+          filter_persona: z.string().optional(),
+        })
+        .parse(args);
+      result = getDecisions(
+        parsed.repo_path,
+        parsed.session_date,
+        parsed.filter_agent,
+        parsed.filter_persona
+      );
     } else {
       throw new Error(`Unknown tool: ${name}`);
     }

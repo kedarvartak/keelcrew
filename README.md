@@ -8,6 +8,9 @@ Shared memory MCP server for Claude Code, Codex, and Gemini CLI. It stores appen
 - `append_message` appends a single user or agent message under the active section.
 - `read_memory` reads the full log or filters by `agent` and `persona`.
 - `get_context` returns the most recent messages as compact context lines.
+- `search_memory` searches messages by keyword, with optional `agent`, `persona`, and tag filters.
+- `summarize_session` returns a compact session summary with participants, decisions, blockers, and todos.
+- `get_decisions` extracts decision entries using `#decision` tags and simple decision heuristics.
 
 ## Install
 
@@ -50,8 +53,16 @@ created: 2026-05-22
 
 ### codex — coder
 **codex** — Implementing the refresh endpoint now.
-**me** — Use Redis for persistence.
+**me** — Use Redis for persistence. #decision
+**gemini** — JWT refresh handling is blocked on test coverage. #blocker
+**me** — Document token expiry behavior. #todo
 ```
+
+Supported inline tags:
+
+- `#decision`
+- `#blocker`
+- `#todo`
 
 ## Development
 
