@@ -7,7 +7,7 @@
 ![node](https://img.shields.io/node/v/multi-agent-memo?style=flat-square&color=black)
 ![mcp](https://img.shields.io/badge/MCP-compatible-black?style=flat-square)
 
-<img src="docs/banner.png" alt="multi-agent-memo" width="100%" />
+<img src="./docs/banner.png" alt="multi-agent-memo" width="100%" />
 
 **Shared memory MCP server for Claude Code, Codex, and Gemini CLI.**  
 One append-only `AGENTS.md` in your repo. Every agent reads it. Every agent writes to it. No copy-paste. No cold starts.
