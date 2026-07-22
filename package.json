@@ -1,13 +1,13 @@
 {
-  "name": "wardroom",
+  "name": "keelcrew",
   "version": "1.0.0",
-  "description": "One terminal harness for parallel AI coding agents on one checkout. Claude, Codex, and Gemini plan, talk, and build together - no worktrees, no merge conflicts.",
+  "description": "Fire-and-forget a crew of coding agents on one checkout. Claude and Codex run themselves in parallel on one working tree - no worktrees, no merge conflicts - and every task records what it changed.",
   "type": "module",
   "main": "dist/mcp.js",
   "types": "dist/mcp.d.ts",
-  "homepage": "https://github.com/kedarvartak/wardroom#readme",
-  "repository": { "type": "git", "url": "git+https://github.com/kedarvartak/wardroom.git" },
-  "bugs": { "url": "https://github.com/kedarvartak/wardroom/issues" },
+  "homepage": "https://github.com/kedarvartak/keelcrew#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/kedarvartak/keelcrew.git" },
+  "bugs": { "url": "https://github.com/kedarvartak/keelcrew/issues" },
   "files": [
     "dist",
     "scripts",
@@ -18,7 +18,7 @@
     "LICENSE"
   ],
   "bin": {
-    "wardroom": "dist/cli.js"
+    "keelcrew": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",

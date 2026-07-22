@@ -1,20 +1,23 @@
-# wardroom
+# keelcrew
 
-One terminal harness for parallel AI coding agents on one checkout.
+Fire-and-forget a crew of coding agents on one checkout — and always have the
+receipts.
 
-Claude Code, Codex, and Gemini CLI plan together, talk to each other, and
-build simultaneously in the same working tree. No worktrees. No merge
-conflicts. You watch the whole crew from a single terminal and steer it.
+Claude Code and Codex run themselves in one terminal, in parallel, on the same
+working tree. No worktrees, no merge conflicts. They take the wheel; you stay
+in sync — every task records what it changed, and (soon) what it cost and one
+command to undo it.
 
-![npm](https://img.shields.io/npm/v/wardroom?style=flat-square&color=black)
-![license](https://img.shields.io/npm/l/wardroom?style=flat-square&color=black)
-![node](https://img.shields.io/node/v/wardroom?style=flat-square&color=black)
+![npm](https://img.shields.io/npm/v/keelcrew?style=flat-square&color=black)
+![license](https://img.shields.io/npm/l/keelcrew?style=flat-square&color=black)
+![node](https://img.shields.io/node/v/keelcrew?style=flat-square&color=black)
 ![mcp](https://img.shields.io/badge/MCP-compatible-black?style=flat-square)
 
-![wardroom — you command a conductor; it dispatches Claude and Codex, who delegate to each other on a live board](docs/demo.gif)
+![keelcrew — you command a conductor; it dispatches Claude and Codex, who delegate to each other on a live board](docs/demo.gif)
 
-The wardroom is the room on a warship where officers meet, plan, and
-coordinate the running of the ship. One ship, one crew, one table.
+The keel is the single backbone that unifies a ship; the crew all pull along
+it. That's the bet: one shared checkout as the keel, a crew of any-vendor
+agents working it as one — coordinated, visible, and reversible.
 
 ---
 
@@ -34,7 +37,7 @@ agent-to-agent communication, results funneled through one orchestrator, and
 roughly 15x token cost. They are a map-reduce over reads, not a team of
 writers.
 
-Wardroom takes the third path: a shared checkout with real coordination.
+Keelcrew takes the third path: a shared checkout with real coordination.
 Conflicts are prevented before the edit instead of merged after. The full
 research with sources is in [docs/parallelism.md](docs/parallelism.md).
 
@@ -55,7 +58,7 @@ Three layers, all state in plain files under `.memo/` in your repo:
    `AGENTS.md` is regenerated as the cold-start index every agent reads
    first. A fresh session resumes where the last one stopped.
 
-3. **The harness** (in development, see the plan). A single `wardroom` CLI
+3. **The harness** (in development, see the plan). A single `keelcrew` CLI
    that spawns each agent CLI as a headless worker, gives agents directed
    messaging so they can ask each other questions and announce changes, and
    renders everything live in one terminal: the board, each agent's work
@@ -65,14 +68,14 @@ Three layers, all state in plain files under `.memo/` in your repo:
 
 ## Current state
 
-The full harness. You start `wardroom`, it comes up as a **conductor** you
+The full harness. You start `keelcrew`, it comes up as a **conductor** you
 command conversationally in one terminal, and it dispatches your Claude and
 Codex to do the work — and they delegate to each other as they go.
 
 ```
-$ wardroom
-WARDROOM — conductor ready. Crew: claude, codex.
-wardroom> add a /login endpoint with JWT, and tests for it
+$ keelcrew
+KEELCREW — conductor ready. Crew: claude, codex.
+keelcrew> add a /login endpoint with JWT, and tests for it
 conductor dispatched 2 task(s):
   task-1 login endpoint + JWT  @claude
   task-2 tests for /login      @codex
@@ -81,7 +84,7 @@ codex  started task-2: tests for /login
 codex -> claude  your /login 500s on a missing password; filed task-3
 claude finished task-1
 ...
-wardroom> also rate-limit login to 5/min          # you keep commanding, live
+keelcrew> also rate-limit login to 5/min          # you keep commanding, live
 ```
 
 You talk to a single conductor; it turns each command into tasks on a **live
@@ -93,24 +96,24 @@ core below.
 Other entry points:
 
 ```
-wardroom crew      list your agents and check each is installed/authenticated
-wardroom run --agents claude,codex ["<goal>"]
+keelcrew crew      list your agents and check each is installed/authenticated
+keelcrew run --agents claude,codex ["<goal>"]
                    non-interactive: drain a board (or plan+run a goal) for CI
-wardroom changes   what each task changed (files, +/-); `show <task>` for the diff
-wardroom watch     live dashboard for hand-driven (MCP) sessions
-wardroom board / log / say / guard / compact / mcp
+keelcrew changes   what each task changed (files, +/-); `show <task>` for the diff
+keelcrew watch     live dashboard for hand-driven (MCP) sessions
+keelcrew board / log / say / guard / compact / mcp
 ```
 
 Fire-and-forget is the point — you let the crew take the wheel. What keeps you
-in sync is that every task records exactly what it changed: `wardroom changes`
-lists it, `wardroom show <task>` prints the diff, and it lands in the session
+in sync is that every task records exactly what it changed: `keelcrew changes`
+lists it, `keelcrew show <task>` prints the diff, and it lands in the session
 writedown. Transparency without gating the autonomy.
 
-`wardroom run` shows the whole crew at once — a pane per agent, the shared
+`keelcrew run` shows the whole crew at once — a pane per agent, the shared
 board, and the crosstalk between them:
 
 ```
-WARDROOM  myrepo  3 agents  elapsed 02:14
+KEELCREW  myrepo  3 agents  elapsed 02:14
 
 -- board  5/5 done -------------------------------------------------------
   x1  x2  x3  x4  x5
@@ -132,21 +135,21 @@ WARDROOM  myrepo  3 agents  elapsed 02:14
   claude -> captain [question] keep a legacy alias for User?  (t3)
 
 -- status ----------------------------------------------------------------
-  3 working | 5/5 done | 1 question(s) for you — reply: wardroom say ...
+  3 working | 5/5 done | 1 question(s) for you — reply: keelcrew say ...
 ```
 
 Agents pull tasks atomically (disjoint files run in parallel, colliding
 files serialize), ask each other questions and answer in threads, and
 escalate decisions to you by addressing `captain`. With review enabled
-(`"review": "all"` in `wardroom.json`), a finished task is checked by a
+(`"review": "all"` in `keelcrew.json`), a finished task is checked by a
 different agent before it counts as done — a caught bug reopens the task with
 the reviewer's notes and the crew fixes it, no operator needed. Tasks
 orphaned by a crashed run are recovered on the next run, and footprint drift
 (declared-but-untouched files) is reported to sharpen future planning.
 
-Leases are advisory by default; an optional `wardroom guard` PreToolUse hook
+Leases are advisory by default; an optional `keelcrew guard` PreToolUse hook
 turns them into hard enforcement for interactive sessions. A token/cost
-`budget` in `wardroom.json` stops a run cleanly when hit, the working logs
+`budget` in `keelcrew.json` stops a run cleanly when hit, the working logs
 compact automatically, and `presence` shows who is on the bridge. The full
 design, phases, and acceptance criteria are in [docs/plan.md](docs/plan.md).
 
@@ -170,7 +173,7 @@ design, phases, and acceptance criteria are in [docs/plan.md](docs/plan.md).
 ## Install and wire
 
 ```bash
-npm install -g wardroom    # or npx wardroom
+npm install -g keelcrew    # or npx keelcrew
 ```
 
 Register the MCP server in each CLI (Claude Code `.claude/settings.json`,
@@ -179,16 +182,16 @@ Codex `~/.codex/config.json`, Gemini `~/.gemini/settings.json`):
 ```json
 {
   "mcpServers": {
-    "wardroom": { "command": "npx", "args": ["wardroom", "mcp"] }
+    "keelcrew": { "command": "npx", "args": ["keelcrew", "mcp"] }
   }
 }
 ```
 
 Copy `CLAUDE.md` and `GEMINI.md` from this repo into your project root;
 Codex reads the generated `AGENTS.md` natively. A ready-to-edit starter
-[`wardroom.json`](wardroom.json) (a `claude` conductor + `codex` teammate)
-ships at the repo root — copy it into your project, run `wardroom crew` to
-confirm your agents are installed, then `wardroom`. Full wiring is in
+[`keelcrew.json`](keelcrew.json) (a `claude` conductor + `codex` teammate)
+ships at the repo root — copy it into your project, run `keelcrew crew` to
+confirm your agents are installed, then `keelcrew`. Full wiring is in
 [docs/setup.md](docs/setup.md).
 
 ## Documentation
@@ -196,7 +199,7 @@ confirm your agents are installed, then `wardroom`. Full wiring is in
 | Document | Contents |
 |----------|----------|
 | [docs/plan.md](docs/plan.md) | Product plan: vision, harness architecture, phases, acceptance criteria, risks |
-| [docs/differentiation.md](docs/differentiation.md) | Landscape research: what makes a harness truly different, what devs want, wardroom's position |
+| [docs/differentiation.md](docs/differentiation.md) | Landscape research: what makes a harness truly different, what devs want, keelcrew's position |
 | [docs/unsolved-issues.md](docs/unsolved-issues.md) | The unsolved issues turned into architecture + a phased implementation plan (with diagrams) |
 | [docs/parallelism.md](docs/parallelism.md) | Research: worktrees vs subagents vs shared-checkout coordination, with sources |
 | [docs/architecture.md](docs/architecture.md) | Coordination core internals: subsystems, on-disk layout, concurrency design |
@@ -206,8 +209,8 @@ confirm your agents are installed, then `wardroom`. Full wiring is in
 ## Development
 
 ```bash
-git clone https://github.com/kedarvartak/wardroom
-cd wardroom
+git clone https://github.com/kedarvartak/keelcrew
+cd keelcrew
 npm install
 
 npm run build   # compile TypeScript to dist/

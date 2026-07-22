@@ -1,5 +1,5 @@
 import { interpretCommand, type ConductorResult } from "./conductor.ts";
-import type { WardroomConfig } from "./config.ts";
+import type { KeelcrewConfig } from "./config.ts";
 import { runPool, type PoolResult, type PoolState } from "./pool.ts";
 
 // ── interactive session ───────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ export type Session = {
 export function startSession(
   repoPath: string,
   crew: string[],
-  config: WardroomConfig,
+  config: KeelcrewConfig,
   hooks: SessionHooks = {}
 ): Session {
   let running = true;
