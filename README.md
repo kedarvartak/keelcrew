@@ -196,6 +196,8 @@ confirm your agents are installed, then `wardroom`. Full wiring is in
 | Document | Contents |
 |----------|----------|
 | [docs/plan.md](docs/plan.md) | Product plan: vision, harness architecture, phases, acceptance criteria, risks |
+| [docs/differentiation.md](docs/differentiation.md) | Landscape research: what makes a harness truly different, what devs want, wardroom's position |
+| [docs/unsolved-issues.md](docs/unsolved-issues.md) | The unsolved issues turned into architecture + a phased implementation plan (with diagrams) |
 | [docs/parallelism.md](docs/parallelism.md) | Research: worktrees vs subagents vs shared-checkout coordination, with sources |
 | [docs/architecture.md](docs/architecture.md) | Coordination core internals: subsystems, on-disk layout, concurrency design |
 | [docs/protocol.md](docs/protocol.md) | The rules agents follow on a shared checkout |
