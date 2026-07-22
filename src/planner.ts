@@ -89,6 +89,7 @@ export function parseTaskPlan(text: string): TaskInput[] {
       description: typeof t.description === "string" ? t.description : undefined,
       files: Array.isArray(t.files) ? t.files.map(String) : undefined,
       depends_on: Array.isArray(t.depends_on) ? t.depends_on.map(String) : undefined,
+      assignee: typeof t.assignee === "string" ? t.assignee : undefined,
     };
   });
 }

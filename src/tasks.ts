@@ -38,6 +38,11 @@ export type Task = {
   files: string[];
   dependsOn: string[];
   status: TaskStatus;
+  // When set, only this agent may claim the task (directed dispatch by the
+  // conductor, or delegation from a peer). Unset = any free agent may claim.
+  assignee?: string;
+  // Who created the task, for the crosstalk trail ("conductor" or an agent).
+  createdBy?: string;
   agent?: string;
   result?: string;
   created: string;
@@ -59,6 +64,7 @@ export type TaskInput = {
   description?: string;
   files?: string[];
   depends_on?: string[];
+  assignee?: string;
 };
 
 function tasksPath(repoPath: string): string {
@@ -112,6 +118,8 @@ export function planTasks(
         files: (input.files ?? []).map((f) => normalizeLabel(f, "file")),
         dependsOn: input.depends_on ?? [],
         status: "pending",
+        ...(input.assignee ? { assignee: normalizeAgent(input.assignee) } : {}),
+        createdBy: normalizedAgent,
         created: nowIso(),
         updated: nowIso(),
       };
@@ -154,7 +162,10 @@ export function claimNextTask(repoPath: string, agent: string): ClaimNextResult 
   return withLock(repoPath, "tasks", () => {
     const state = loadState(repoPath);
     const eligible = state.tasks.filter(
-      (task) => task.status === "pending" && depsSatisfied(state, task)
+      (task) =>
+        task.status === "pending" &&
+        depsSatisfied(state, task) &&
+        (!task.assignee || task.assignee === normalizedAgent)
     );
 
     if (eligible.length === 0) {

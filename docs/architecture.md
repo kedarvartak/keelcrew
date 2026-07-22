@@ -129,7 +129,18 @@ changed). This is the first call every agent makes.
   workers also renew their file lease during long tasks so it can't lapse.
 - Token/cost budgets — the pool sums usage events; a cap stops new claims
   (in-flight tasks finish) and the run ends with a writedown.
-- `cli.ts` — `plan`/`run "<goal>"` (planner + approve), `run --agents` (pool),
+- `conductor.ts` — the lead you talk to in the console: interprets each
+  command into tasks appended to the live board (aware of the board + roster;
+  dispatches by `assignee`).
+- `session.ts` — long-lived session controller: runs the pool in keep-alive
+  mode so the crew waits for new/delegated work, `command()` runs the
+  conductor, `stop()` drains and writes a session writedown.
+- `console.ts` — the interactive REPL (`wardroom` with no args): crew activity
+  streams above a persistent prompt.
+- Directed assignment + `delegate_task`: a task can be pinned to one agent, so
+  the conductor can dispatch to a specific agent and agents can delegate to a
+  peer; `claim_next_task` respects the assignee.
+- `cli.ts` — `console` (default), `crew`, `plan`/`run "<goal>"`, `run --agents`,
   `watch`, `board`, `log`, `say`, `guard`, `compact`, `mcp`.
 
 ## What was removed

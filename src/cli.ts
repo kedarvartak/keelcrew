@@ -13,9 +13,12 @@ import { renderDashboard, renderLog } from "./renderer.ts";
 
 const HELP = `wardroom - one terminal for parallel coding agents on one checkout
 
-usage: wardroom <command> [options]
+usage: wardroom [command] [options]   (no command = interactive console)
 
 commands:
+  (none) / console        start the interactive conductor console: command
+                          the crew conversationally in one terminal
+  crew                    list configured agents and check each is installed
   mcp                     start the MCP server over stdio (wire this into
                           Claude Code / Codex / Gemini CLI configs)
   plan "<goal>" [--yes]   planner agent decomposes a goal into a task board;
@@ -127,6 +130,50 @@ async function cmdLog(repo: string, args: string[]): Promise<void> {
       last = current;
     }
   }, 500);
+}
+
+async function cmdCrew(repo: string, args: string[]): Promise<void> {
+  const { execFileSync } = await import("child_process");
+  const { loadConfig } = await import("./config.ts");
+  const config = loadConfig(repo);
+  const names = Object.keys(config.agents);
+  process.stdout.write(`crew (${names.length}): from wardroom.json\n`);
+  for (const name of names) {
+    const agent = config.agents[name];
+    let installed = false;
+    try {
+      execFileSync("bash", ["-lc", `command -v ${JSON.stringify(agent.bin)}`], { stdio: "ignore" });
+      installed = true;
+    } catch {
+      installed = false;
+    }
+    const lead = name === (config.conductor || config.planner) ? " (conductor)" : "";
+    process.stdout.write(
+      `  ${installed ? "✓" : "✗"} ${name}${lead} -> ${agent.bin} [${agent.adapter}]` +
+        (installed ? "" : "  NOT FOUND on PATH") +
+        "\n"
+    );
+  }
+  process.stdout.write(
+    "\nInstalled agents run on their own login/subscription; make sure each CLI is authenticated.\n"
+  );
+}
+
+async function cmdConsole(repo: string, args: string[]): Promise<void> {
+  const { loadConfig } = await import("./config.ts");
+  const { runConsole } = await import("./console.ts");
+  const config = loadConfig(repo);
+  const agentsRaw = flagValue(args, "--agents");
+  const crew = agentsRaw
+    ? agentsRaw.split(",").map((a) => a.trim()).filter(Boolean)
+    : Object.keys(config.agents);
+  if (crew.length === 0) {
+    throw new Error("no agents configured; add them to wardroom.json (see docs/setup.md)");
+  }
+  for (const name of crew) {
+    if (!config.agents[name]) throw new Error(`unknown agent "${name}" (not in wardroom.json)`);
+  }
+  await runConsole(repo, crew, config);
 }
 
 async function cmdGuard(args: string[]): Promise<void> {
@@ -361,6 +408,13 @@ async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
 
   switch (command) {
+    case undefined:
+    case "console":
+      await cmdConsole(repoPath(), args);
+      return;
+    case "crew":
+      await cmdCrew(repoPath(), args);
+      return;
     case "run":
       await cmdRun(repoPath(), args);
       return;
@@ -393,9 +447,7 @@ async function main(): Promise<void> {
     case "help":
     case "--help":
     case "-h":
-    case undefined:
       process.stdout.write(HELP);
-      if (command === undefined) process.exitCode = 1;
       return;
     default:
       process.stderr.write(`unknown command: ${command}\n\n${HELP}`);

@@ -63,24 +63,39 @@ Three layers, all state in plain files under `.memo/` in your repo:
 
 ## Current state
 
-The full harness (v1.0): the coordination core, memory, agent-to-agent
-messaging, and a pool of headless agents draining one board concurrently —
-planning, reviewing each other's work, and recovering from crashes — rendered
-live in a single terminal.
+The full harness. You start `wardroom`, it comes up as a **conductor** you
+command conversationally in one terminal, and it dispatches your Claude and
+Codex to do the work — and they delegate to each other as they go.
 
 ```
-wardroom plan "add JWT auth with refresh tokens"
-                   a planner agent decomposes the goal into a file-scoped
-                   task board; you approve, edit, or regenerate it
-wardroom run --agents claude,codex,gemini ["<goal>"]
-                   run one worker per agent against the board (plan first if
-                   a goal is given); optional cross-agent review before done
-wardroom watch     live dashboard for interactive (MCP) sessions
-wardroom board     print the task board
-wardroom log -f    merged events + messages timeline, follow mode
-wardroom say "answer" --to claude --thread 4
-                   reply to an agent's question as the captain
-wardroom mcp       the stdio MCP server the agent CLIs connect to
+$ wardroom
+WARDROOM — conductor ready. Crew: claude, codex.
+wardroom> add a /login endpoint with JWT, and tests for it
+conductor dispatched 2 task(s):
+  task-1 login endpoint + JWT  @claude
+  task-2 tests for /login      @codex
+claude started task-1: login endpoint + JWT
+codex  started task-2: tests for /login
+codex -> claude  your /login 500s on a missing password; filed task-3
+claude finished task-1
+...
+wardroom> also rate-limit login to 5/min          # you keep commanding, live
+```
+
+You talk to a single conductor; it turns each command into tasks on a **live
+board** and dispatches the crew. Agents delegate by filing tasks assigned to a
+peer (`task-3` above), file leases keep them from colliding, and you can drop
+new commands in anytime. Under the console, everything is the coordination
+core below.
+
+Other entry points:
+
+```
+wardroom crew      list your agents and check each is installed/authenticated
+wardroom run --agents claude,codex ["<goal>"]
+                   non-interactive: drain a board (or plan+run a goal) for CI
+wardroom watch     live dashboard for hand-driven (MCP) sessions
+wardroom board / log / say / guard / compact / mcp
 ```
 
 `wardroom run` shows the whole crew at once — a pane per agent, the shared
@@ -134,7 +149,8 @@ design, phases, and acceptance criteria are in [docs/plan.md](docs/plan.md).
 | Tool | Purpose |
 |------|---------|
 | `get_context` | One call: latest writedown, task board, claims, recent events |
-| `plan_tasks` | Create tasks with file footprints and dependencies |
+| `plan_tasks` | Create tasks with file footprints, dependencies, optional assignee |
+| `delegate_task` | Hand work to a specific peer (a task assigned to them + a heads-up) |
 | `claim_next_task` | Atomically pull the next runnable, non-conflicting task |
 | `complete_task` / `fail_task` / `release_task` | Finish or return work; releases leases |
 | `get_board` | Render the full task board |
