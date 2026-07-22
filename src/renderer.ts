@@ -2,6 +2,7 @@ import path from "path";
 import { activeClaims } from "./claims.ts";
 import { getEvents } from "./events.ts";
 import { crosstalk, openQuestions, unreadCount } from "./messages.ts";
+import type { PoolState } from "./pool.ts";
 import { listTasks, type TaskStatus } from "./tasks.ts";
 
 // ── terminal dashboard ────────────────────────────────────────────────────────
@@ -108,6 +109,84 @@ export function renderDashboard(repoPath: string, width = 78): string {
   lines.push(
     `  ${openTasks} open task(s) | ${claims.length} active claim(s) | ${captainNote} | ${DIM}reply: wardroom say --to <agent> "..."${RESET}`
   );
+
+  return lines.join("\n");
+}
+
+function elapsed(sinceMs: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - sinceMs) / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+const PHASE_LABEL: Record<string, string> = {
+  idle: "idle",
+  waiting: "waiting",
+  claimed: "claimed",
+  working: "working",
+  verifying: "verifying",
+  done: "done",
+  failed: "failed",
+};
+
+// The live multiplexed view for `wardroom run` with a pool: a board strip, one
+// pane per agent (its current task + recent activity), the shared crosstalk
+// feed, and a status line. Per-agent panes come from in-memory PoolState (the
+// agents' transient stdout is not persisted); board and crosstalk come from
+// the .memo files every worker writes to.
+export function renderPool(repoPath: string, state: PoolState, width = 88): string {
+  const lines: string[] = [];
+  lines.push(
+    `${BOLD}WARDROOM${RESET}  ${path.basename(repoPath)}  ${DIM}${state.panes.length} agents  elapsed ${elapsed(state.startedAt)}${RESET}`
+  );
+  lines.push("");
+
+  const tasks = listTasks(repoPath);
+  const done = tasks.filter((t) => t.status === "done").length;
+  lines.push(header(`board  ${done}/${tasks.length} done`, width));
+  if (tasks.length > 0) {
+    lines.push("  " + tasks.map((t) => `${STATUS_ICON[t.status]}${t.id.replace("task-", "")}`).join("  "));
+  }
+  lines.push("");
+
+  for (const pane of state.panes) {
+    const task = pane.taskId ? `${pane.taskId}: ${pane.taskTitle ?? ""}`.trim() : "";
+    const head = `${pane.agent}  ${DIM}${PHASE_LABEL[pane.phase] ?? pane.phase}${task ? ` ${task}` : ""}${RESET}`;
+    lines.push(header(head, width));
+    if (pane.lines.length === 0) {
+      lines.push(`  ${DIM}...${RESET}`);
+    } else {
+      for (const line of pane.lines) {
+        lines.push(`  ${line.length > width - 4 ? line.slice(0, width - 5) + "…" : line}`);
+      }
+    }
+    const meta = `${pane.completed} done, ${pane.failed} failed${pane.tokens ? `, ${pane.tokens} tok` : ""}`;
+    lines.push(`  ${DIM}${meta}${RESET}`);
+  }
+  lines.push("");
+
+  const talk = crosstalk(repoPath, 6);
+  lines.push(header("crosstalk", width));
+  if (talk.length === 0) {
+    lines.push(`${DIM}  quiet${RESET}`);
+  } else {
+    for (const m of talk) {
+      const kindTag = m.kind === "info" ? "" : ` ${YELLOW}[${m.kind}]${RESET}`;
+      const toCaptain = m.to === "captain" ? YELLOW : "";
+      lines.push(
+        `  ${DIM}${shortTime(m.time)}${RESET} ${CYAN}${m.from}${RESET} -> ${toCaptain}${m.to}${RESET}${kindTag} ${m.body}  ${DIM}(t${m.thread})${RESET}`
+      );
+    }
+  }
+  lines.push("");
+
+  const captainUnread = unreadCount(repoPath, "captain");
+  const working = state.panes.filter((p) => p.phase === "working" || p.phase === "verifying").length;
+  const captainNote =
+    captainUnread > 0
+      ? `${YELLOW}${captainUnread} question(s) for you — reply: wardroom say --to <agent> "..." --thread <n>${RESET}`
+      : "no questions for you";
+  lines.push(header("status", width));
+  lines.push(`  ${working} working | ${done}/${tasks.length} done | ${captainNote}`);
 
   return lines.join("\n");
 }

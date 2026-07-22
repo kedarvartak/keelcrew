@@ -121,9 +121,10 @@ wardroom watch     live dashboard (board, claims, crosstalk, events)
 wardroom board     print the task board and exit
 wardroom log -f    merged events + messages timeline, follow mode
 wardroom say "<msg>" [--to agent] [--kind question|info] [--thread N]
-wardroom run --agents <name> [--max-tasks N]
-                   drain the board with a headless worker (one agent for
-                   now; the multi-agent pool is Phase 3)
+wardroom run --agents A[,B,...] [--max-tasks N] [--no-tty]
+                   run a pool of headless workers (one per agent) against the
+                   shared board; live multiplexed view, or interleaved lines
+                   with --no-tty for logs/CI
 wardroom mcp       the stdio MCP server (what the CLI configs invoke)
 ```
 
