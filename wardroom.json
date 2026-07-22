@@ -1,0 +1,19 @@
+{
+  "conductor": "claude",
+  "planner": "claude",
+  "review": "off",
+  "verify": "npm test",
+  "taskTimeoutMinutes": 20,
+  "agents": {
+    "claude": {
+      "adapter": "claude",
+      "bin": "claude",
+      "args": ["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"]
+    },
+    "codex": {
+      "adapter": "codex",
+      "bin": "codex",
+      "args": ["exec", "--json"]
+    }
+  }
+}
