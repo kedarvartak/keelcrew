@@ -10,7 +10,7 @@ Summary:
 |-------|-------|--------|
 | P0 | Coordination core: locked store, task board, file leases, event bus, writedown memory | Shipped |
 | P1 | Directed agent messaging (threads, questions, captain) and the CLI skeleton: `wardroom watch\|board\|log\|say\|mcp` | Shipped |
-| P2 | Adapters for claude/codex/gemini and the single-worker headless loop | Planned |
+| P2 | Adapters for claude/codex/gemini and the single-worker headless loop (`wardroom run`) | Shipped |
 | P3 | Multi-agent live sessions: worker pool, message injection, full multiplexed renderer | Planned |
 | P4 | Planner mode, cross-agent review policy, footprint-drift telemetry | Planned |
 | P5 | Hardening: enforcement hooks, heartbeats, compaction, budgets, 1.0 on npm | Planned |
