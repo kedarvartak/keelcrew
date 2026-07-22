@@ -162,41 +162,46 @@ function paneBox(pane: PoolState["panes"][number], width: number, height: number
 
 export function renderBridge(repoPath: string, model: BridgeModel, cols: number, rows: number): Frame {
   const W = Math.max(60, cols);
-  const H = Math.max(18, rows);
-  const IW = W - 4; // interior content width (outer borders + 1-col padding each side)
-  const IH = H - 2; // interior rows
+  const H = Math.max(20, rows);
+  const M = 2; // left/right margin so content never hugs the terminal edge
+  const CW = W - M * 2; // content width
 
   const panes = model.state.panes;
-  const online = panes.filter((p) => p.phase !== "idle").length;
-  const stats = `${panes.length} agents · ${online} active · ${fmtElapsed(Date.now() - model.state.startedAt)} · ${fmtTokens(model.tokens)} tok`;
+  const tasks = listTasks(repoPath);
+  const done = tasks.filter((t) => t.status === "done").length;
 
-  // ── interior sections (each exactly IW visible) ──────────────────────────
+  // Each entry is a content line exactly CW visible; margins are added at wrap.
   const body: string[] = [];
-  const blank = () => seg(IW, [["", C.text]]);
+  const blank = () => seg(CW, [["", C.text]]);
 
   body.push(blank());
 
-  // board strip
-  const tasks = listTasks(repoPath);
-  const done = tasks.filter((t) => t.status === "done").length;
+  // board strip — the only status line (no branded header). Stats ride on its
+  // right edge so nothing is lost by dropping the header.
   const glyphs: Part[] = [["board  ", C.dim]];
-  if (tasks.length === 0) glyphs.push(["(empty — give the conductor a command)", C.faint]);
+  if (tasks.length === 0) glyphs.push(["give the conductor a command below", C.faint]);
   for (const t of tasks.slice(-18)) {
     const color =
       t.status === "done" ? C.good : t.status === "failed" ? C.bad : t.status === "pending" ? C.faint : C.brass;
     glyphs.push([STATUS_GLYPH[t.status] + t.id.replace("task-", "") + " ", color]);
   }
-  body.push(lineLR(IW, glyphs, tasks.length ? `${done}/${tasks.length} done` : undefined, C.dim));
+  const right = `${fmtElapsed(Date.now() - model.state.startedAt)} · ${fmtTokens(model.tokens)} tok${tasks.length ? ` · ${done}/${tasks.length} done` : ""}`;
+  body.push(lineLR(CW, glyphs, right, C.faint));
   body.push(blank());
 
-  // crew strip: N boxed panes side by side, spanning IW
-  const bottomRows = 8; // blank, crosstalk head, 2 msgs, blank, rule, prompt, hint
-  const crewH = Math.max(4, IH - 3 - bottomRows);
+  // How many rows the fixed lower sections need, so the crew fills the rest.
+  const CHAT_BOTTOM_PAD = 3; // Claude-Code-style breathing room under the input
+  const fixedLower =
+    1 /*blank*/ + 1 /*crosstalk head*/ + 2 /*msgs*/ + 1 /*blank*/ + 3 /*chat box*/ + 1 /*hint*/ + CHAT_BOTTOM_PAD;
+  const usedTop = body.length; // blank + board + blank
+  const crewH = Math.max(4, H - usedTop - fixedLower);
+
+  // crew strip: N boxed panes side by side, spanning CW
   const n = Math.max(1, panes.length);
   const gap = 2;
-  const baseW = Math.floor((IW - (n - 1) * gap) / n);
-  const widths = Array.from({ length: n }, (_, i) => baseW);
-  widths[n - 1] += IW - (baseW * n + (n - 1) * gap); // absorb rounding into the last pane
+  const baseW = Math.floor((CW - (n - 1) * gap) / n);
+  const widths = Array.from({ length: n }, () => baseW);
+  widths[n - 1] += CW - (baseW * n + (n - 1) * gap);
   const boxes = panes.map((p, i) => paneBox(p, widths[i], crewH));
   for (let r = 0; r < crewH; r++) {
     let row = "";
@@ -210,14 +215,14 @@ export function renderBridge(repoPath: string, model: BridgeModel, cols: number,
   body.push(blank());
 
   // crosstalk
-  body.push(seg(IW, [["crosstalk", C.dim]]));
+  body.push(seg(CW, [["crosstalk", C.dim]]));
   const talk = crosstalk(repoPath, 2);
   for (let i = 0; i < 2; i++) {
     const m = talk[talk.length - 2 + i];
     if (!m) { body.push(blank()); continue; }
     const toCol = m.to === "captain" ? C.warn : agentColor(m.to);
     body.push(
-      seg(IW, [
+      seg(CW, [
         [m.from, agentColor(m.from)],
         [" → ", C.faint],
         [m.to, toCol],
@@ -227,30 +232,24 @@ export function renderBridge(repoPath: string, model: BridgeModel, cols: number,
   }
   body.push(blank());
 
-  // input
-  body.push(C.rule + "─".repeat(IW) + RESET);
+  // ── chat bar: a rounded input box, then a dim hint ───────────────────────
   const prompt = model.busy ? "◇ " : "› ";
   const promptColor = model.busy ? C.dim : C.brass;
-  const field = IW - 2;
+  const field = CW - 6; // box borders(2) + pads(2) + prompt(2)
   const raw = model.busy ?? model.input;
   const shown = raw.length > field ? raw.slice(-field) : raw;
-  const promptIndex = body.length;
-  body.push(seg(IW, [[prompt, promptColor], [shown, model.busy ? C.dim : C.text]]));
-  body.push(seg(IW, [["enter send · /quit exit · ctrl-c stop", C.faint]]));
 
-  // pad/trim interior to exactly IH
-  while (body.length < IH) body.splice(promptIndex, 0, blank());
-  const interior = body.slice(0, IH);
-  const promptRow = Math.min(promptIndex, IH - 1);
+  body.push(edge(CW, "╭", "╮", {}));
+  body.push(boxRow(CW, [[prompt, promptColor], [shown, model.busy ? C.dim : C.text]]));
+  body.push(edge(CW, "╰", "╯", {}));
+  body.push(seg(CW, [["  enter send · /quit exit · ctrl-c stop", C.faint]]));
+  for (let i = 0; i < CHAT_BOTTOM_PAD; i++) body.push(blank());
 
-  // ── wrap in the outer frame ──────────────────────────────────────────────
-  const lines: string[] = [];
-  lines.push(edge(W, "╭", "╮", { title: "WARDROOM · " + model.project, titleColor: C.brass + BOLD, right: stats, rightColor: C.faint }));
-  for (const c of interior) lines.push(C.rule + "│" + RESET + " " + c + " " + C.rule + "│" + RESET);
-  lines.push(edge(W, "╰", "╯", {}));
+  const lines = body.slice(0, H).map((c) => " ".repeat(M) + c + " ".repeat(M));
 
-  // cursor: 1-indexed, parked after the typed text in the input row
-  const cursorRow = 1 + promptRow + 1;
-  const cursorCol = 3 + prompt.length + Math.min(shown.length, field); // outer│ + pad + prompt
-  return { lines: lines.slice(0, H), cursorRow, cursorCol };
+  // cursor: 1-indexed. The chat box sits a fixed distance from the bottom:
+  // box-bottom + hint + CHAT_BOTTOM_PAD rows follow the input row.
+  const cursorRow = H - (CHAT_BOTTOM_PAD + 2);
+  const cursorCol = M + 5 + Math.min(shown.length, field); // margin + "│ › "
+  return { lines, cursorRow, cursorCol };
 }
