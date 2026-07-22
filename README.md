@@ -73,14 +73,18 @@ wardroom board     print the task board
 wardroom log -f    merged events + messages timeline, follow mode
 wardroom say "answer" --to claude --thread 4
                    reply to an agent's question as the captain
+wardroom run --agents claude
+                   drain the task board with a headless worker: claim task,
+                   run the agent CLI, gate completion on your verify command
 wardroom mcp       the stdio MCP server the agent CLIs connect to
 ```
 
 Agents ask each other questions with `send_message(kind="question")`,
 answer in threads, and escalate decisions to you by addressing `captain` —
-all of it visible in the crosstalk pane of `wardroom watch`. The headless
-worker pool that runs agents from this same terminal is next; the full plan
-with phases and acceptance criteria is in [docs/plan.md](docs/plan.md).
+all of it visible in the crosstalk pane of `wardroom watch`. Headless runs
+are configured in `wardroom.json` (binaries, permission flags, the `verify`
+command that gates task completion). One worker at a time today; the
+concurrent multi-agent pool is Phase 3 of [docs/plan.md](docs/plan.md).
 
 ![Roadmap](docs/diagrams/roadmap.png)
 

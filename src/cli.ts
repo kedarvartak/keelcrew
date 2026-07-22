@@ -16,6 +16,9 @@ usage: wardroom <command> [options]
 commands:
   mcp                     start the MCP server over stdio (wire this into
                           Claude Code / Codex / Gemini CLI configs)
+  run --agents NAME [--max-tasks N]
+                          drain the task board with a headless worker
+                          (single agent for now; multi-agent is Phase 3)
   watch                   live dashboard: board, claims, crosstalk, events
   board                   print the task board and exit
   log [-n N] [--follow]   merged events + messages timeline
@@ -131,10 +134,61 @@ function cmdSay(repo: string, args: string[]): void {
   process.stdout.write(`sent #${message.seq} captain -> ${message.to} (thread t${message.thread})\n`);
 }
 
+async function cmdRun(repo: string, args: string[]): Promise<void> {
+  const { loadConfig } = await import("./config.ts");
+  const { runWorker } = await import("./worker.ts");
+
+  const agentsRaw = flagValue(args, "--agents");
+  if (!agentsRaw) {
+    throw new Error("usage: wardroom run --agents <name> [--max-tasks N]");
+  }
+  const agents = agentsRaw.split(",").map((a) => a.trim()).filter(Boolean);
+  if (agents.length !== 1) {
+    throw new Error("multiple agents arrive in Phase 3; run one agent for now, e.g. --agents claude");
+  }
+  const maxTasks = Number(flagValue(args, "--max-tasks") ?? Infinity);
+
+  const DIM = "\x1b[2m";
+  const CYAN = "\x1b[36m";
+  const YELLOW = "\x1b[33m";
+  const RESET = "\x1b[0m";
+
+  const config = loadConfig(repo);
+  const result = await runWorker(
+    repo,
+    agents[0],
+    config,
+    {
+      onStatus: (line) => process.stdout.write(`${YELLOW}== ${line}${RESET}\n`),
+      onEvent: (agent, task, event) => {
+        const tag = `${CYAN}[${agent} ${task.id}]${RESET}`;
+        if (event.kind === "text") {
+          process.stdout.write(`${tag} ${event.text}\n`);
+        } else if (event.kind === "tool") {
+          process.stdout.write(`${tag} ${DIM}${event.detail}${RESET}\n`);
+        } else if (event.kind === "result") {
+          process.stdout.write(`${tag} ${event.ok ? "" : YELLOW}result: ${event.summary}${RESET}\n`);
+        } else if (event.kind === "usage") {
+          process.stdout.write(`${tag} ${DIM}usage: ${event.tokens ?? "?"} tokens${event.costUsd ? `, $${event.costUsd.toFixed(4)}` : ""}${RESET}\n`);
+        }
+      },
+    },
+    maxTasks
+  );
+
+  process.stdout.write(
+    `\n${result.agent}: ${result.completed} done, ${result.failed} failed (${result.stopped})\n`
+  );
+  if (result.failed > 0) process.exitCode = 1;
+}
+
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
 
   switch (command) {
+    case "run":
+      await cmdRun(repoPath(), args);
+      return;
     case "mcp": {
       const { runMcp } = await import("./mcp.ts");
       await runMcp();

@@ -121,8 +121,38 @@ wardroom watch     live dashboard (board, claims, crosstalk, events)
 wardroom board     print the task board and exit
 wardroom log -f    merged events + messages timeline, follow mode
 wardroom say "<msg>" [--to agent] [--kind question|info] [--thread N]
+wardroom run --agents <name> [--max-tasks N]
+                   drain the board with a headless worker (one agent for
+                   now; the multi-agent pool is Phase 3)
 wardroom mcp       the stdio MCP server (what the CLI configs invoke)
 ```
 
 Run them from the repo root; state lives in `./.memo/`. Typical setup: your
 agent CLIs in their own terminals, `wardroom watch` in one more.
+
+## wardroom.json
+
+Optional per-repo config for headless runs. Defaults cover the three CLIs;
+override binaries, flags (including each CLI's permission/sandbox flags),
+the verification gate, and the per-task timeout:
+
+```json
+{
+  "agents": {
+    "claude": {
+      "adapter": "claude",
+      "bin": "claude",
+      "args": ["-p", "--output-format", "stream-json", "--verbose",
+               "--permission-mode", "acceptEdits"]
+    }
+  },
+  "verify": "npm test",
+  "taskTimeoutMinutes": 20
+}
+```
+
+`verify` runs after every file-touching task; the task only counts as done
+if the command passes — completion is gated on verification, not on the
+model claiming success. Agent CLIs must be authenticated and configured to
+run non-interactively (each CLI's own permission flags go in `args`); a
+worker whose CLI stalls on an approval prompt is killed at the timeout.
