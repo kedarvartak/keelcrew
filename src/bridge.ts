@@ -1,4 +1,3 @@
-import path from "path";
 import { crosstalk } from "./messages.ts";
 import type { PoolState } from "./pool.ts";
 import { listTasks, type TaskStatus } from "./tasks.ts";
@@ -6,12 +5,12 @@ import { listTasks, type TaskStatus } from "./tasks.ts";
 // ── the bridge: a full-screen TUI renderer ────────────────────────────────────
 // Pure function of state -> a frame (exactly `rows` lines, each exactly `cols`
 // visible columns wide) plus where to park the cursor. The interactive driver
-// in console.ts owns terminal I/O; this owns layout. Keeping it pure means the
-// whole TUI is snapshot-testable.
+// in console.ts owns terminal I/O; this owns layout.
 //
-// The centerpiece is the crew strip: one live pane per agent, side by side, so
-// true parallelism is what you see — several coding agents working at once on
-// one checkout.
+// Everything lives inside one rounded outer frame with interior padding, so
+// nothing collides with the terminal edge. The centerpiece is the crew: one
+// boxed pane per agent, side by side, updating at once — true parallelism is
+// what you see.
 
 const ESC = "\x1b[";
 const RESET = ESC + "0m";
@@ -26,11 +25,11 @@ const C = {
   talk: fg(184, 150, 255),
   text: fg(214, 223, 236),
   dim: fg(122, 137, 158),
-  faint: fg(78, 92, 112),
+  faint: fg(84, 98, 118),
   good: fg(123, 216, 143),
   warn: fg(226, 178, 94),
   bad: fg(230, 120, 120),
-  rule: fg(45, 56, 72),
+  rule: fg(58, 70, 88),
 };
 
 function agentColor(name: string): string {
@@ -57,8 +56,12 @@ const PHASE: Record<string, string> = {
 
 type Part = [text: string, color?: string];
 
-// Build a run of colored segments padded/truncated to exactly `width` visible
-// columns. Colors add no visible width; truncation adds an ellipsis.
+const ESC_RE = /\x1b\[[0-9;]*m/g;
+function visLen(s: string): number {
+  return s.replace(ESC_RE, "").length;
+}
+
+// Colored segments padded/truncated to exactly `width` visible columns.
 function seg(width: number, parts: Part[]): string {
   let out = "";
   let vis = 0;
@@ -73,15 +76,46 @@ function seg(width: number, parts: Part[]): string {
   return out;
 }
 
-function rule(width: number): string {
-  return C.rule + "─".repeat(width) + RESET;
+// A box border line of exact visible width, with an optional left title and an
+// optional right-aligned label embedded in the rule.
+function edge(
+  width: number,
+  lc: string,
+  rc: string,
+  opts: { title?: string; titleColor?: string; right?: string; rightColor?: string } = {}
+): string {
+  const B = C.rule;
+  const inner = width - 2;
+  let mid = "";
+  let used = 0;
+  if (opts.title) {
+    mid += "─ " + (opts.titleColor ?? C.text) + opts.title + RESET + B + " ";
+    used += 3 + visLen(opts.title);
+  }
+  let rightStr = "";
+  if (opts.right) {
+    rightStr = " " + (opts.rightColor ?? C.dim) + opts.right + RESET + B + " ─";
+    used += 3 + visLen(opts.right);
+  }
+  const fill = Math.max(0, inner - used);
+  return B + lc + mid + "─".repeat(fill) + rightStr + B + rc + RESET;
+}
+
+// A body row inside a box: │ <content padded to width-4> │
+function boxRow(width: number, parts: Part[]): string {
+  return C.rule + "│" + RESET + " " + seg(width - 4, parts) + " " + C.rule + "│" + RESET;
+}
+
+// left-aligned parts with an optional right-aligned label, to exact width.
+function lineLR(width: number, left: Part[], right?: string, rightColor?: string): string {
+  const r = right ?? "";
+  return seg(width - visLen(r), left) + (r ? (rightColor ?? C.dim) + r + RESET : "");
 }
 
 function fmtElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
-
 function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
@@ -90,151 +124,133 @@ export type BridgeModel = {
   project: string;
   state: PoolState;
   input: string;
-  busy: string | null; // e.g. "conductor: interpreting…" while a command runs
+  busy: string | null;
   tokens: number;
 };
 
 export type Frame = { lines: string[]; cursorRow: number; cursorCol: number };
 
-// One agent's pane as `height` lines, each `width` visible cols.
-function agentPane(pane: PoolState["panes"][number], width: number, height: number): string[] {
+// One agent as a boxed pane: `width` × `height` lines. Title in the top border,
+// recent activity anchored to the bottom, a counts footer.
+function paneBox(pane: PoolState["panes"][number], width: number, height: number): string[] {
   const ac = agentColor(pane.agent);
   const busy = pane.phase === "working" || pane.phase === "verifying" || pane.phase === "claimed";
   const dot = busy ? "●" : "○";
-  const lines: string[] = [];
+  const title = `${dot} ${pane.agent}   ${PHASE[pane.phase] ?? pane.phase}${pane.taskId ? " " + pane.taskId : ""}`;
 
-  // header: ● claude   working task-3
-  lines.push(
-    seg(width, [
-      [dot + " ", busy ? ac : C.faint],
-      [pane.agent, ac + BOLD],
-      ["  " + (PHASE[pane.phase] ?? pane.phase), C.dim],
-      [pane.taskId ? " " + pane.taskId : "", C.faint],
-    ])
-  );
-  // subtitle: current task title
-  lines.push(seg(width, [[pane.taskId ? pane.taskTitle ?? "" : "—", C.faint]]));
-
-  // body: recent activity anchored to the BOTTOM of the pane (just above the
-  // footer), so the freshest line sits next to the action — reads as live.
+  const lines = [edge(width, "┌", "┐", { title, titleColor: ac + BOLD })];
   const bodyRows = Math.max(1, height - 3);
-  const recent = pane.lines.slice(-bodyRows);
-  for (let i = 0; i < bodyRows - recent.length; i++) lines.push(seg(width, [["", C.text]]));
-  for (const l of recent) lines.push(seg(width, [["  " + l, C.text]]));
 
-  // footer: counts + tokens
+  const rows: string[] = [];
+  if (pane.taskId && pane.taskTitle) rows.push(boxRow(width, [[pane.taskTitle, C.faint]]));
+  for (const l of pane.lines) rows.push(boxRow(width, [[l, C.text]]));
+  const shown = rows.slice(-bodyRows);
+  const blanks = bodyRows - shown.length;
+  for (let i = 0; i < blanks; i++) lines.push(boxRow(width, [["", C.text]]));
+  for (const r of shown) lines.push(r);
+
   lines.push(
-    seg(width, [
+    boxRow(width, [
       [`${pane.completed} done`, C.dim],
       [pane.failed ? ` · ${pane.failed} failed` : "", C.bad],
       [pane.tokens ? ` · ${fmtTokens(pane.tokens)} tok` : "", C.faint],
     ])
   );
+  lines.push(edge(width, "└", "┘", {}));
   return lines.slice(0, height);
 }
 
 export function renderBridge(repoPath: string, model: BridgeModel, cols: number, rows: number): Frame {
-  const W = Math.max(48, cols);
-  const H = Math.max(16, rows);
-  const lines: string[] = [];
+  const W = Math.max(60, cols);
+  const H = Math.max(18, rows);
+  const IW = W - 4; // interior content width (outer borders + 1-col padding each side)
+  const IH = H - 2; // interior rows
+
   const panes = model.state.panes;
-
-  // ── header bar ──────────────────────────────────────────────────────────
   const online = panes.filter((p) => p.phase !== "idle").length;
-  const left: Part[] = [
-    ["  ", C.text],
-    ["WARDROOM", C.brass + BOLD],
-    ["  " + model.project, C.dim],
-  ];
-  const right = `${panes.length} agents · ${online} active · ${fmtElapsed(Date.now() - model.state.startedAt)} · ${fmtTokens(model.tokens)} tok  `;
-  lines.push(seg(W - right.length, left) + C.faint + right + RESET);
+  const stats = `${panes.length} agents · ${online} active · ${fmtElapsed(Date.now() - model.state.startedAt)} · ${fmtTokens(model.tokens)} tok`;
 
-  // ── board strip ─────────────────────────────────────────────────────────
+  // ── interior sections (each exactly IW visible) ──────────────────────────
+  const body: string[] = [];
+  const blank = () => seg(IW, [["", C.text]]);
+
+  body.push(blank());
+
+  // board strip
   const tasks = listTasks(repoPath);
   const done = tasks.filter((t) => t.status === "done").length;
-  const glyphs: Part[] = [["  board  ", C.dim]];
-  for (const t of tasks.slice(-16)) {
+  const glyphs: Part[] = [["board  ", C.dim]];
+  if (tasks.length === 0) glyphs.push(["(empty — give the conductor a command)", C.faint]);
+  for (const t of tasks.slice(-18)) {
     const color =
       t.status === "done" ? C.good : t.status === "failed" ? C.bad : t.status === "pending" ? C.faint : C.brass;
     glyphs.push([STATUS_GLYPH[t.status] + t.id.replace("task-", "") + " ", color]);
   }
-  if (tasks.length === 0) glyphs.push(["(empty — give the conductor a command)", C.faint]);
-  const boardRight = tasks.length ? `${done}/${tasks.length} done  ` : "";
-  lines.push(seg(W - boardRight.length, glyphs) + C.dim + boardRight + RESET);
-  lines.push(rule(W));
+  body.push(lineLR(IW, glyphs, tasks.length ? `${done}/${tasks.length} done` : undefined, C.dim));
+  body.push(blank());
 
-  // ── crew strip (side-by-side agent panes) ───────────────────────────────
-  // Reserve rows for header(2)+rule + crosstalk(1 head + ctRows) + input(3).
-  const ctRows = 3;
-  const fixedBelow = 1 /*rule*/ + 1 /*ct head*/ + ctRows + 3 /*input*/;
-  const paneH = Math.max(4, H - lines.length - fixedBelow);
+  // crew strip: N boxed panes side by side, spanning IW
+  const bottomRows = 8; // blank, crosstalk head, 2 msgs, blank, rule, prompt, hint
+  const crewH = Math.max(4, IH - 3 - bottomRows);
   const n = Math.max(1, panes.length);
-  const sep = 3; // " │ "
-  const colW = Math.max(14, Math.floor((W - (n - 1) * sep) / n));
-  const columns = panes.map((p) => agentPane(p, colW, paneH));
-  for (let r = 0; r < paneH; r++) {
+  const gap = 2;
+  const baseW = Math.floor((IW - (n - 1) * gap) / n);
+  const widths = Array.from({ length: n }, (_, i) => baseW);
+  widths[n - 1] += IW - (baseW * n + (n - 1) * gap); // absorb rounding into the last pane
+  const boxes = panes.map((p, i) => paneBox(p, widths[i], crewH));
+  for (let r = 0; r < crewH; r++) {
     let row = "";
-    for (let cI = 0; cI < n; cI++) {
-      row += columns[cI][r] ?? " ".repeat(colW);
-      if (cI < n - 1) row += C.rule + " │ " + RESET;
+    for (let i = 0; i < n; i++) {
+      row += boxes[i][r] ?? " ".repeat(widths[i]);
+      if (i < n - 1) row += " ".repeat(gap);
     }
-    lines.push(padVisible(row, W));
+    body.push(row);
   }
-  lines.push(rule(W));
 
-  // ── crosstalk ───────────────────────────────────────────────────────────
-  lines.push(seg(W, [["  crosstalk", C.dim]]));
-  const talk = crosstalk(repoPath, ctRows);
-  for (let i = 0; i < ctRows; i++) {
-    const m = talk[talk.length - ctRows + i];
-    if (!m) {
-      lines.push(seg(W, [["", C.text]]));
-      continue;
-    }
+  body.push(blank());
+
+  // crosstalk
+  body.push(seg(IW, [["crosstalk", C.dim]]));
+  const talk = crosstalk(repoPath, 2);
+  for (let i = 0; i < 2; i++) {
+    const m = talk[talk.length - 2 + i];
+    if (!m) { body.push(blank()); continue; }
     const toCol = m.to === "captain" ? C.warn : agentColor(m.to);
-    lines.push(
-      seg(W, [
-        ["  " + m.from, agentColor(m.from)],
+    body.push(
+      seg(IW, [
+        [m.from, agentColor(m.from)],
         [" → ", C.faint],
         [m.to, toCol],
         ["  " + m.body, m.to === "captain" ? C.warn : C.text],
       ])
     );
   }
+  body.push(blank());
 
-  // ── input box ───────────────────────────────────────────────────────────
+  // input
+  body.push(C.rule + "─".repeat(IW) + RESET);
   const prompt = model.busy ? "◇ " : "› ";
   const promptColor = model.busy ? C.dim : C.brass;
-  const field = W - 6; // "│ " + prompt(2) + field + " │"
+  const field = IW - 2;
   const raw = model.busy ?? model.input;
   const shown = raw.length > field ? raw.slice(-field) : raw;
+  const promptIndex = body.length;
+  body.push(seg(IW, [[prompt, promptColor], [shown, model.busy ? C.dim : C.text]]));
+  body.push(seg(IW, [["enter send · /quit exit · ctrl-c stop", C.faint]]));
 
-  const boxTop = C.rule + "╭" + "─".repeat(W - 2) + "╮" + RESET;
-  const inputLine =
-    C.rule + "│ " + RESET +
-    promptColor + prompt + RESET +
-    seg(field, [[shown, model.busy ? C.dim : C.text]]) +
-    C.rule + " │" + RESET;
-  const hintText = model.busy ? "  working…" : "  enter send · /quit exit · ctrl-c stop";
-  const fill = Math.max(0, W - 2 - hintText.length);
-  const boxBot = C.rule + "╰" + RESET + C.faint + hintText + RESET + C.rule + "─".repeat(fill) + "╯" + RESET;
+  // pad/trim interior to exactly IH
+  while (body.length < IH) body.splice(promptIndex, 0, blank());
+  const interior = body.slice(0, IH);
+  const promptRow = Math.min(promptIndex, IH - 1);
 
-  lines.push(boxTop, inputLine, boxBot);
+  // ── wrap in the outer frame ──────────────────────────────────────────────
+  const lines: string[] = [];
+  lines.push(edge(W, "╭", "╮", { title: "WARDROOM · " + model.project, titleColor: C.brass + BOLD, right: stats, rightColor: C.faint }));
+  for (const c of interior) lines.push(C.rule + "│" + RESET + " " + c + " " + C.rule + "│" + RESET);
+  lines.push(edge(W, "╰", "╯", {}));
 
-  while (lines.length < H) lines.push(padVisible("", W));
-  const frame = lines.slice(0, H);
-
-  // 1-indexed cursor position, parked after the typed text in the input field.
-  const cursorRow = H - 1; // input line is second from the bottom
-  const cursorCol = 5 + Math.min(shown.length, field);
-  return { lines: frame, cursorRow, cursorCol };
-}
-
-// Visible-length helpers that ignore ANSI escapes.
-function visLen(s: string): number {
-  return s.replace(/\x1b\[[0-9;]*m/g, "").length;
-}
-function padVisible(s: string, width: number): string {
-  const v = visLen(s);
-  return v < width ? s + " ".repeat(width - v) : s;
+  // cursor: 1-indexed, parked after the typed text in the input row
+  const cursorRow = 1 + promptRow + 1;
+  const cursorCol = 3 + prompt.length + Math.min(shown.length, field); // outer│ + pad + prompt
+  return { lines: lines.slice(0, H), cursorRow, cursorCol };
 }
