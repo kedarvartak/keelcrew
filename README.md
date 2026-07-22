@@ -177,8 +177,11 @@ Codex `~/.codex/config.json`, Gemini `~/.gemini/settings.json`):
 ```
 
 Copy `CLAUDE.md` and `GEMINI.md` from this repo into your project root;
-Codex reads the generated `AGENTS.md` natively. Full wiring, including the
-optional cold-start injection hook, is in [docs/setup.md](docs/setup.md).
+Codex reads the generated `AGENTS.md` natively. A ready-to-edit starter
+[`wardroom.json`](wardroom.json) (a `claude` conductor + `codex` teammate)
+ships at the repo root — copy it into your project, run `wardroom crew` to
+confirm your agents are installed, then `wardroom`. Full wiring is in
+[docs/setup.md](docs/setup.md).
 
 ## Documentation
 

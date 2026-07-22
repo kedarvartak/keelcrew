@@ -138,9 +138,21 @@ agent CLIs in their own terminals, `wardroom watch` in one more.
 
 ## wardroom.json
 
-Optional per-repo config for headless runs. Defaults cover the three CLIs;
-override binaries, flags (including each CLI's permission/sandbox flags),
-the verification gate, and the per-task timeout:
+A ready-to-edit **starter `wardroom.json` ships at the repo root** — it wires a
+`claude` conductor plus a `codex` teammate. Copy it into your own project and
+adjust the binaries/flags. Run `wardroom crew` to confirm both are installed
+and authenticated, then `wardroom` to start the console.
+
+Two things to check for real use:
+- **Claude** is set to `--permission-mode acceptEdits` so it can edit
+  headlessly. Use a stricter mode (or a sandbox) if you prefer.
+- **Codex**: `codex exec --json` is the baseline; depending on your Codex
+  version you may need to add its auto-approve/sandbox flag so it applies edits
+  without prompting. A worker whose CLI stalls on approval is killed at the
+  timeout.
+
+Full field reference — override binaries, flags (including each CLI's
+permission/sandbox flags), the verification gate, and the per-task timeout:
 
 ```json
 {
