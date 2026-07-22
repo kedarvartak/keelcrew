@@ -1,5 +1,5 @@
 import path from "path";
-import { claimFiles, releaseClaimsForTask, type ClaimConflict } from "./claims.ts";
+import { activeClaims, claimFiles, releaseClaimsForTask, type ClaimConflict } from "./claims.ts";
 import { postEvent } from "./events.ts";
 import {
   memoDir,
@@ -271,6 +271,43 @@ export function releaseTask(repoPath: string, agent: string, taskId: string): Ta
       task: task.id,
     });
     return task;
+  });
+}
+
+// Crash recovery. A task left "claimed" whose file lease has since expired was
+// orphaned by an agent (or a whole `wardroom run`) that died without
+// completing or failing it. Its lease is gone, so no one is protected from
+// editing those files — return it to the board so another worker picks it up.
+// Called at pool startup and, optionally, on a periodic sweep during a run.
+// Healthy in-flight tasks always hold a live lease, so this never touches them.
+export function requeueStaleClaims(repoPath: string): string[] {
+  return withLock(repoPath, "tasks", () => {
+    const state = loadState(repoPath);
+    const leasedTaskIds = new Set(
+      activeClaims(repoPath).map((claim) => claim.taskId).filter(Boolean)
+    );
+    const requeued: string[] = [];
+
+    for (const task of state.tasks) {
+      if (task.status === "claimed" && !leasedTaskIds.has(task.id)) {
+        const orphanedFrom = task.agent;
+        task.status = "pending";
+        delete task.agent;
+        delete task.result;
+        task.updated = nowIso();
+        requeued.push(task.id);
+        postEvent(
+          repoPath,
+          "wardroom",
+          "task-requeued",
+          `${task.id} was orphaned by ${orphanedFrom ?? "an agent"} (lease expired) - returned to the board`,
+          { task: task.id }
+        );
+      }
+    }
+
+    if (requeued.length > 0) saveState(repoPath, state);
+    return requeued;
   });
 }
 

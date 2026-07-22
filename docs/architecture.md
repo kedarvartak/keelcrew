@@ -96,6 +96,24 @@ prior writedowns into a fresh chat.
 and active claims (what is happening *right now*), recent events (what just
 changed). This is the first call every agent makes.
 
+## The harness (Phases 1-3, on top of the core)
+
+- `messages.ts` — directed, threaded agent-to-agent (and agent-to-captain)
+  mail; same locked-NDJSON discipline as events.
+- `adapters/` — one per CLI (claude/codex/gemini) normalizing headless output
+  to a `text`/`tool`/`result`/`usage` event stream; a shared runner enforces
+  timeouts and a single terminal result.
+- `worker.ts` — the per-agent loop: claim -> prompt (task + context + inbox)
+  -> spawn -> stream -> verification gate -> complete/fail.
+- `pool.ts` — runs one worker per agent concurrently against the same board.
+  No extra concurrency machinery: `claim_next_task` is already atomic, so the
+  core arbitrates. Requeues tasks orphaned by a crashed run at startup,
+  captures a writedown on exit.
+- `renderer.ts` — pure state-to-string views: `renderPool` (live multiplexed
+  panes + board + crosstalk + status) and `renderDashboard`/`renderLog`.
+- `cli.ts` — `run` (live TTY panes or `--no-tty` interleaved lines),
+  `watch`, `board`, `log`, `say`, `mcp`.
+
 ## What was removed
 
 `src/memory.ts` — the v0.1 append-only line log (`start_session`,

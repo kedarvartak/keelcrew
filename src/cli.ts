@@ -16,9 +16,9 @@ usage: wardroom <command> [options]
 commands:
   mcp                     start the MCP server over stdio (wire this into
                           Claude Code / Codex / Gemini CLI configs)
-  run --agents NAME [--max-tasks N]
-                          drain the task board with a headless worker
-                          (single agent for now; multi-agent is Phase 3)
+  run --agents A[,B,...] [--max-tasks N] [--no-tty]
+                          drain the task board with a pool of headless
+                          workers (one per agent), live multiplexed view
   watch                   live dashboard: board, claims, crosstalk, events
   board                   print the task board and exit
   log [-n N] [--follow]   merged events + messages timeline
@@ -136,48 +136,96 @@ function cmdSay(repo: string, args: string[]): void {
 
 async function cmdRun(repo: string, args: string[]): Promise<void> {
   const { loadConfig } = await import("./config.ts");
-  const { runWorker } = await import("./worker.ts");
+  const { runPool } = await import("./pool.ts");
+  const { renderPool } = await import("./renderer.ts");
 
+  const noTty = hasFlag(args, "--no-tty") || hasFlag(args, "--plain");
   const agentsRaw = flagValue(args, "--agents");
   if (!agentsRaw) {
-    throw new Error("usage: wardroom run --agents <name> [--max-tasks N]");
+    throw new Error("usage: wardroom run --agents <name>[,<name>...] [--max-tasks N] [--no-tty]");
   }
   const agents = agentsRaw.split(",").map((a) => a.trim()).filter(Boolean);
-  if (agents.length !== 1) {
-    throw new Error("multiple agents arrive in Phase 3; run one agent for now, e.g. --agents claude");
-  }
   const maxTasks = Number(flagValue(args, "--max-tasks") ?? Infinity);
+  const config = loadConfig(repo);
 
   const DIM = "\x1b[2m";
   const CYAN = "\x1b[36m";
   const YELLOW = "\x1b[33m";
   const RESET = "\x1b[0m";
 
-  const config = loadConfig(repo);
-  const result = await runWorker(
+  const live = process.stdout.isTTY && !noTty;
+
+  if (live) {
+    const ALT_ON = "\x1b[?1049h";
+    const ALT_OFF = "\x1b[?1049l";
+    const CLEAR = "\x1b[2J\x1b[H";
+    let latest = "";
+    let dirty = true;
+    const draw = () => {
+      if (!dirty) return;
+      dirty = false;
+      process.stdout.write(CLEAR + latest + "\n");
+    };
+    const timer = setInterval(draw, 200);
+    process.stdout.write(ALT_ON);
+    const restore = () => {
+      clearInterval(timer);
+      process.stdout.write(ALT_OFF);
+    };
+    process.on("SIGINT", () => {
+      restore();
+      process.exit(130);
+    });
+
+    try {
+      const result = await runPool(
+        repo,
+        agents,
+        config,
+        {
+          onChange: (state) => {
+            latest = renderPool(repo, state, process.stdout.columns ?? 88);
+            dirty = true;
+          },
+        },
+        { maxTasksPerAgent: maxTasks, sweepMs: 10_000 }
+      );
+      restore();
+      process.stdout.write(
+        `${result.completed} done, ${result.failed} failed across ${agents.join(", ")} in ${Math.round(result.durationMs / 1000)}s` +
+          (result.requeued.length ? ` (requeued ${result.requeued.length} orphaned)` : "") +
+          (result.writedownFile ? `\nwritedown: ${result.writedownFile}` : "") +
+          "\n"
+      );
+      if (result.failed > 0) process.exitCode = 1;
+    } catch (error) {
+      restore();
+      throw error;
+    }
+    return;
+  }
+
+  // Non-TTY / --no-tty: interleaved labeled lines, loggable and CI-friendly.
+  const result = await runPool(
     repo,
-    agents[0],
+    agents,
     config,
     {
       onStatus: (line) => process.stdout.write(`${YELLOW}== ${line}${RESET}\n`),
-      onEvent: (agent, task, event) => {
-        const tag = `${CYAN}[${agent} ${task.id}]${RESET}`;
-        if (event.kind === "text") {
-          process.stdout.write(`${tag} ${event.text}\n`);
-        } else if (event.kind === "tool") {
-          process.stdout.write(`${tag} ${DIM}${event.detail}${RESET}\n`);
-        } else if (event.kind === "result") {
+      onLine: (agent, taskId, event) => {
+        const tag = `${CYAN}[${agent} ${taskId}]${RESET}`;
+        if (event.kind === "text") process.stdout.write(`${tag} ${event.text}\n`);
+        else if (event.kind === "tool") process.stdout.write(`${tag} ${DIM}${event.detail}${RESET}\n`);
+        else if (event.kind === "result")
           process.stdout.write(`${tag} ${event.ok ? "" : YELLOW}result: ${event.summary}${RESET}\n`);
-        } else if (event.kind === "usage") {
-          process.stdout.write(`${tag} ${DIM}usage: ${event.tokens ?? "?"} tokens${event.costUsd ? `, $${event.costUsd.toFixed(4)}` : ""}${RESET}\n`);
-        }
       },
     },
-    maxTasks
+    { maxTasksPerAgent: maxTasks, sweepMs: 10_000 }
   );
-
   process.stdout.write(
-    `\n${result.agent}: ${result.completed} done, ${result.failed} failed (${result.stopped})\n`
+    `\n${result.completed} done, ${result.failed} failed across ${agents.join(", ")} in ${Math.round(result.durationMs / 1000)}s` +
+      (result.requeued.length ? ` (requeued ${result.requeued.length} orphaned)` : "") +
+      "\n"
   );
   if (result.failed > 0) process.exitCode = 1;
 }

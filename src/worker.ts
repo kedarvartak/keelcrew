@@ -25,9 +25,14 @@ const PARSERS: Record<string, LineParser> = {
   gemini: parseGeminiLine,
 };
 
+export type WorkerPhase = "claimed" | "working" | "verifying" | "done" | "failed" | "waiting" | "idle";
+
 export type WorkerHooks = {
   onEvent?: (agent: string, task: Task, event: AgentEvent) => void;
   onStatus?: (line: string) => void;
+  // Structured lifecycle transitions, for pane-based renderers that need more
+  // than free-text status lines.
+  onPhase?: (agent: string, phase: WorkerPhase, task?: Task) => void;
 };
 
 export type TaskOutcome = {
@@ -100,6 +105,7 @@ export async function runWorker(
   const parser = PARSERS[agentConfig.adapter];
   const timeoutMs = config.taskTimeoutMinutes * 60_000;
   const status = hooks.onStatus ?? (() => {});
+  const phase = hooks.onPhase ?? (() => {});
 
   const result: WorkerResult = { agent: agentName, completed: 0, failed: 0, outcomes: [], stopped: "board drained" };
 
@@ -115,6 +121,7 @@ export async function runWorker(
         // Another worker (or an interactive session) holds work our pending
         // tasks depend on; a single worker just waits its turn.
         status(`${agentName}: waiting - ${claim.reason}`);
+        phase(agentName, "waiting");
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       } else {
@@ -126,14 +133,17 @@ export async function runWorker(
     if (claim.status === "all-blocked") {
       const holders = [...new Set(claim.blocked.flatMap((b) => b.conflicts.map((c) => c.holder)))];
       status(`${agentName}: all eligible tasks blocked by lease(s) held by ${holders.join(", ")}; waiting`);
+      phase(agentName, "waiting");
       await new Promise((r) => setTimeout(r, 3000));
       continue;
     }
 
     const task = claim.task;
     status(`${agentName}: claimed ${task.id} - ${task.title}`);
+    phase(agentName, "claimed", task);
 
     const prompt = buildPrompt(repoPath, agentName, task);
+    phase(agentName, "working", task);
     const spawned = spawnCli(agentConfig.bin, agentConfig.args, prompt, repoPath, timeoutMs, parser);
 
     let agentOk = false;
@@ -163,6 +173,7 @@ export async function runWorker(
       detail = agentSummary;
     } else if (config.verify && task.files.length > 0) {
       status(`${agentName}: verifying ${task.id} (${config.verify})`);
+      phase(agentName, "verifying", task);
       const verify = await runVerify(config.verify, repoPath, timeoutMs);
       if (verify.ok) {
         outcome = "done";
@@ -185,10 +196,12 @@ export async function runWorker(
     }
     result.outcomes.push({ task, status: outcome, summary: detail });
     status(`${agentName}: ${task.id} ${outcome}`);
+    phase(agentName, outcome, task);
   }
 
   if (result.completed + result.failed >= maxTasks) {
     result.stopped = `reached max tasks (${maxTasks})`;
   }
+  phase(agentName, "idle");
   return result;
 }

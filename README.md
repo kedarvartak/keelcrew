@@ -64,27 +64,57 @@ Three layers, all state in plain files under `.memo/` in your repo:
 ## Current state
 
 Shipped today: the coordination core, memory, agent-to-agent messaging, and
-the first slice of the harness — a live terminal dashboard. Agents connect
-over MCP from their own CLIs; you watch and steer from one terminal:
+the harness bridge — a pool of headless agents draining one board
+concurrently, rendered live in a single terminal.
 
 ```
-wardroom watch     live dashboard: board, claims, crosstalk, events, status
+wardroom run --agents claude,codex,gemini
+                   run one worker per agent against the shared board; claim,
+                   run the CLI, gate completion on your verify command
+wardroom watch     live dashboard for interactive (MCP) sessions
 wardroom board     print the task board
 wardroom log -f    merged events + messages timeline, follow mode
 wardroom say "answer" --to claude --thread 4
                    reply to an agent's question as the captain
-wardroom run --agents claude
-                   drain the task board with a headless worker: claim task,
-                   run the agent CLI, gate completion on your verify command
 wardroom mcp       the stdio MCP server the agent CLIs connect to
 ```
 
-Agents ask each other questions with `send_message(kind="question")`,
-answer in threads, and escalate decisions to you by addressing `captain` —
-all of it visible in the crosstalk pane of `wardroom watch`. Headless runs
-are configured in `wardroom.json` (binaries, permission flags, the `verify`
-command that gates task completion). One worker at a time today; the
-concurrent multi-agent pool is Phase 3 of [docs/plan.md](docs/plan.md).
+`wardroom run` shows the whole crew at once — a pane per agent, the shared
+board, and the crosstalk between them:
+
+```
+WARDROOM  myrepo  3 agents  elapsed 02:14
+
+-- board  5/5 done -------------------------------------------------------
+  x1  x2  x3  x4  x5
+
+-- claude  working task-2: api -----------------------------------
+  Editing src/api.ts
+  Ran npm test -- api (12 passed)
+  1 done, 0 failed, 1840 tok
+-- codex  verifying task-3: ui -----------------------------------
+  Reading src/ui.ts
+  Wrote src/ui.ts
+  1 done, 0 failed, 2210 tok
+-- gemini  working task-4: docs ----------------------------------
+  Writing docs/x.md
+
+-- crosstalk -------------------------------------------------------------
+  codex -> claude [question] does task-1 rename the User type?  (t1)
+  claude -> codex yes, it is now Account  (t1)
+  claude -> captain [question] keep a legacy alias for User?  (t3)
+
+-- status ----------------------------------------------------------------
+  3 working | 5/5 done | 1 question(s) for you — reply: wardroom say ...
+```
+
+Agents pull tasks atomically (disjoint files run in parallel, colliding
+files serialize), ask each other questions and answer in threads, and
+escalate decisions to you by addressing `captain`. Tasks orphaned by a
+crashed run are returned to the board on the next run. Headless behavior is
+configured in `wardroom.json` (binaries, permission flags, the `verify`
+command that gates completion). What remains is planning quality and
+cross-agent review — Phase 4 of [docs/plan.md](docs/plan.md).
 
 ![Roadmap](docs/diagrams/roadmap.png)
 

@@ -8,9 +8,10 @@ This document is the build plan: vision, architecture, workstreams, phased
 delivery with acceptance criteria, risks. Diagrams referenced here live in
 `docs/diagrams/`.
 
-Status: Phases 0-2 complete — core, messaging, the `wardroom` CLI
-(`watch|board|log|say|mcp`), all three adapters, and the single-worker
-`wardroom run --agents <name>`. Phases 3-5 planned. Last updated 2026-07-22.
+Status: Phases 0-3 complete — core, messaging, the `wardroom` CLI, all three
+adapters, and the concurrent multi-agent worker pool with a live multiplexed
+view (`wardroom run --agents claude,codex,gemini`), crash recovery, and
+end-of-run writedown. Phases 4-5 planned. Last updated 2026-07-22.
 
 ---
 
