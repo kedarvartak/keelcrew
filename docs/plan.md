@@ -8,12 +8,36 @@ This document is the build plan: vision, architecture, workstreams, phased
 delivery with acceptance criteria, risks. Diagrams referenced here live in
 `docs/diagrams/`.
 
-Status: Phases 0-5 complete — the full harness plus hardening. Core,
-messaging, the `wardroom` CLI, all three adapters, the concurrent worker pool
-with a live multiplexed view, planner mode, cross-agent review, footprint
-telemetry, and (Phase 5) the enforcement guard, log/board compaction, lease
-heartbeats + presence, token/cost budgets, and a 1.0 publishable package.
-Last updated 2026-07-22.
+Status: Phases 0-6 complete. Phases 0-5 built the substrate and a batch
+runner; Phase 6 added the **interactive conductor console** — the primary UX
+the project was actually for: you start `wardroom`, command a single conductor
+conversationally in one terminal, and it dispatches Claude and Codex, who
+delegate to each other on a live board. The batch `wardroom run` is retained
+as the non-interactive/CI path. Last updated 2026-07-22.
+
+## Phase 6 — the interactive conductor console (the real front end)
+
+The earlier phases assumed a *batch* shape: plan a board, approve it, run to
+completion. The intended UX is *interactive*: a single terminal that stays up,
+a conductor you talk to, and a board that grows from your commands and from
+agents delegating to each other at runtime — nothing pre-approved.
+
+Delivered:
+- **Directed assignment** (`tasks.ts`): a task can be assigned to a specific
+  agent; `claim_next_task` respects it. This is the mechanism for both the
+  conductor dispatching to an agent and an agent delegating to a peer.
+- **`delegate_task` MCP tool**: an agent hands work to a named teammate (a task
+  assigned to them + a heads-up message) from inside its own session.
+- **Keep-alive session** (`session.ts` + pool `keepAlive`): the crew stays on
+  the bridge with an empty board, waiting for new/delegated tasks, until you
+  stop — instead of the batch pool exiting when drained.
+- **Conductor** (`conductor.ts`): interprets each natural-language command into
+  tasks appended to the live board (aware of the current board and the roster,
+  so it extends rather than duplicates and can dispatch by assignee).
+- **Console** (`console.ts`, `wardroom` with no args): a persistent prompt with
+  the crew's activity streaming above it; `/board`, `/say`, `/quit`.
+- **`wardroom crew`**: the ingestion check — lists agents and confirms each CLI
+  is installed (they run on their own login/subscription).
 
 ---
 

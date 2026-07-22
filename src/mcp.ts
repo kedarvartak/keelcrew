@@ -93,12 +93,42 @@ const tools = [
                 items: { type: "string" },
                 description: "Task ids or '$<index>' refs into this batch that must finish first.",
               },
+              assignee: {
+                type: "string",
+                description: "Optional. Restrict this task to a specific agent (directed dispatch). Omit to let any free agent claim it.",
+              },
             },
             required: ["title"],
           },
         },
       },
       required: ["repo_path", "agent", "tasks"],
+    },
+  },
+  {
+    name: "delegate_task",
+    description:
+      "Hand a piece of work to another agent. Creates a task assigned to `to` (only they can claim it) and notifies them. Use this mid-task when part of the work belongs to a teammate — e.g. you built an endpoint and want the tests written by someone else.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...repoPathProp,
+        from: { type: "string", description: "Your agent name (the delegator)." },
+        to: { type: "string", description: "The agent to hand the work to." },
+        title: { type: "string", description: "Short task title." },
+        description: { type: "string", description: "What to do and how to verify it." },
+        files: {
+          type: "array",
+          items: { type: "string" },
+          description: "Files/globs the delegated task will touch.",
+        },
+        depends_on: {
+          type: "array",
+          items: { type: "string" },
+          description: "Task ids that must finish before this one.",
+        },
+      },
+      required: ["repo_path", "from", "to", "title"],
     },
   },
   {
@@ -385,6 +415,7 @@ const taskInputSchema = z.object({
   description: z.string().optional(),
   files: z.array(z.string()).optional(),
   depends_on: z.array(z.string()).optional(),
+  assignee: z.string().optional(),
 });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
@@ -405,6 +436,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         .object({ repo_path: z.string(), agent: z.string(), tasks: z.array(taskInputSchema) })
         .parse(args);
       result = planTasks(parsed.repo_path, parsed.agent, parsed.tasks);
+    } else if (name === "delegate_task") {
+      const parsed = z
+        .object({
+          repo_path: z.string(),
+          from: z.string(),
+          to: z.string(),
+          title: z.string(),
+          description: z.string().optional(),
+          files: z.array(z.string()).optional(),
+          depends_on: z.array(z.string()).optional(),
+        })
+        .parse(args);
+      const { created } = planTasks(parsed.repo_path, parsed.from, [
+        {
+          title: parsed.title,
+          description: parsed.description,
+          files: parsed.files,
+          depends_on: parsed.depends_on,
+          assignee: parsed.to,
+        },
+      ]);
+      sendMessage(
+        parsed.repo_path,
+        parsed.from,
+        parsed.to,
+        `Delegated ${created[0].id}: ${parsed.title}`,
+        "info"
+      );
+      result = created[0];
     } else if (name === "claim_next_task") {
       const parsed = z.object({ repo_path: z.string(), agent: z.string() }).parse(args);
       result = claimNextTask(parsed.repo_path, parsed.agent);

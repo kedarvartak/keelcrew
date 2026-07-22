@@ -75,6 +75,10 @@ export type WorkerOptions = {
   // Cooperative stop: checked before each new claim. When it returns true the
   // worker finishes nothing new and returns (in-flight work already completed).
   shouldStop?: () => boolean;
+  // Keep-alive: when the board drains but this returns true, the worker idles
+  // and waits for new/delegated tasks instead of exiting. This is what keeps a
+  // long-lived interactive session's crew on the bridge between commands.
+  keepAlive?: () => boolean;
 };
 
 function buildPrompt(repoPath: string, agent: string, task: Task): string {
@@ -257,6 +261,11 @@ export async function runWorker(
       const claimed = listTasks(repoPath, "claimed").length;
       const reviewsLeft = reviewEnabled && anyReviewsOutstanding(repoPath);
       if (pending === 0 && claimed === 0 && !reviewsLeft) {
+        if (!options.shouldStop?.() && options.keepAlive?.()) {
+          phase(agentName, "idle");
+          await new Promise((r) => setTimeout(r, 1500));
+          continue;
+        }
         result.stopped = "board drained";
       } else if (claimed > 0 || reviewsLeft) {
         // Another worker holds work our pending tasks depend on, or a task is

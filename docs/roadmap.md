@@ -14,6 +14,7 @@ Summary:
 | P3 | Multi-agent live sessions: concurrent worker pool, multiplexed renderer, crash recovery, exit writedown | Shipped |
 | P4 | Planner mode (`plan/run "<goal>"`), cross-agent review, footprint-drift telemetry | Shipped |
 | P5 | Hardening: enforcement guard, lease heartbeats + presence, log/board compaction, token budgets, 1.0 package | Shipped |
+| P6 | Interactive conductor console: directed assignment, `delegate_task`, keep-alive session, conductor, `wardroom` REPL, `crew` | Shipped |
 
 ## History
 

@@ -117,6 +117,9 @@ it works underneath.
 The same package installs the `wardroom` command for the human:
 
 ```
+wardroom           start the interactive conductor console (single terminal):
+                   command the crew conversationally; it dispatches your agents
+wardroom crew      list configured agents and check each is installed
 wardroom watch     live dashboard (board, claims, crosstalk, events)
 wardroom board     print the task board and exit
 wardroom log -f    merged events + messages timeline, follow mode
@@ -161,6 +164,9 @@ the verification gate, and the per-task timeout:
   task is reviewed by a *different* agent before it counts as done — so
   review needs 2+ agents in the run, and an author never reviews its own work.
 - `planner`: which agent decomposes goals in `wardroom plan`/`run "<goal>"`.
+- `conductor`: the lead you talk to in the interactive console; it interprets
+  your commands into board tasks. Defaults to `planner` if unset. The `agents`
+  you list are the crew — only those are dispatched (no others are injected).
 - `budget`: `{ "tokens": N, "usd": N }` per-session cap. When either is
   reached, workers stop claiming new tasks (in-flight tasks finish) and the
   run ends with a writedown. Omit for no cap.

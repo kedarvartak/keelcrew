@@ -66,6 +66,9 @@ export type PoolOptions = {
   sweepMs?: number;
   // Set false to skip the end-of-run writedown (used by tests).
   writedown?: boolean;
+  // Interactive sessions: keep workers alive on a drained board, waiting for
+  // new/delegated tasks, until this returns false.
+  keepAlive?: () => boolean;
 };
 
 function pushLine(pane: AgentPane, text: string): void {
@@ -201,7 +204,7 @@ export async function runPool(
             onStatus: hooks.onStatus,
           },
           options.maxTasksPerAgent ?? Infinity,
-          { peers: agentNames.filter((peer) => peer !== name), shouldStop }
+          { peers: agentNames.filter((peer) => peer !== name), shouldStop, keepAlive: options.keepAlive }
         )
       )
     );

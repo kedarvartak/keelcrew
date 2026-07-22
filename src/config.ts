@@ -30,6 +30,9 @@ export type WardroomConfig = {
   review: ReviewPolicy;
   // Which agent decomposes goals in `wardroom plan`/`run "<goal>"`.
   planner: string;
+  // The lead you talk to in the interactive console; it interprets your
+  // commands into board tasks. Defaults to the planner if unset.
+  conductor?: string;
   // Per-session budget. When exceeded, workers stop claiming NEW tasks (in-flight
   // tasks finish), and the run ends with a writedown. Omit for no cap.
   budget?: { tokens?: number; usd?: number };
@@ -71,10 +74,23 @@ export function loadConfig(repoPath: string): WardroomConfig {
     throw new Error(`wardroom.json is not valid JSON: ${error instanceof Error ? error.message : error}`);
   }
 
+  // Roster: if wardroom.json lists agents, THOSE are the crew (we don't inject
+  // the other built-in agents). Each named agent is filled in from the matching
+  // built-in default, so `{ "claude": {} }` still gets claude's bin/args.
+  let agents: Record<string, AgentConfig>;
+  if (parsed.agents && Object.keys(parsed.agents).length > 0) {
+    agents = {};
+    for (const [name, a] of Object.entries(parsed.agents)) {
+      agents[name] = { ...(DEFAULTS.agents[name] ?? {}), ...a } as AgentConfig;
+    }
+  } else {
+    agents = structuredClone(DEFAULTS.agents);
+  }
+
   const config: WardroomConfig = {
     ...structuredClone(DEFAULTS),
     ...parsed,
-    agents: { ...structuredClone(DEFAULTS.agents), ...(parsed.agents ?? {}) },
+    agents,
   };
 
   for (const [name, agent] of Object.entries(config.agents)) {
