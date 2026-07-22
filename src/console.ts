@@ -1,129 +1,121 @@
+import path from "path";
 import readline from "readline";
-import type { AgentEvent } from "./adapters/types.ts";
+import { renderBridge, type BridgeModel } from "./bridge.ts";
 import type { WardroomConfig } from "./config.ts";
 import { sendMessage } from "./messages.ts";
 import type { PoolState } from "./pool.ts";
 import { startSession } from "./session.ts";
-import { renderBoard } from "./tasks.ts";
 
-// ── the interactive console ───────────────────────────────────────────────────
-// One terminal. You type commands to the conductor; the crew works in the
-// background and its activity streams above a persistent prompt. This is the
-// front the whole project was built for: "command it like you normally do."
-//
-// Presentation is a live log above a readline prompt (robust in any terminal)
-// rather than a fixed-pane TUI: every status/agent line is printed above the
-// input line, which is re-rendered preserving whatever you're mid-typing.
+// ── the interactive console (full-screen TUI) ─────────────────────────────────
+// A proper agent-harness bridge: a header, a live board strip, side-by-side
+// agent panes updating in parallel, a crosstalk feed, and a bordered input box.
+// You command the conductor; the crew works in front of you. Presentation is
+// bridge.ts (pure); this owns terminal I/O — alt screen, raw-mode keystrokes,
+// the redraw loop, and clean teardown.
 
-const DIM = "\x1b[2m";
-const CYAN = "\x1b[36m";
-const YELLOW = "\x1b[33m";
-const GREEN = "\x1b[32m";
-const BOLD = "\x1b[1m";
-const RESET = "\x1b[0m";
-
-const HELP = `commands:
-  <anything>        a command for the conductor (it dispatches the crew)
-  /board            show the full task board
-  /say <msg>        message the crew as the captain (answer a question)
-  /help             this help
-  /quit             stop the crew and exit`;
+const ALT_ON = "\x1b[?1049h";
+const ALT_OFF = "\x1b[?1049l";
+const CLEAR = "\x1b[2J";
+const HIDE = "\x1b[?25l";
+const SHOW = "\x1b[?25h";
+const HOME = "\x1b[H";
 
 export async function runConsole(repoPath: string, crew: string[], config: WardroomConfig): Promise<void> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  rl.setPrompt(`${BOLD}wardroom>${RESET} `);
+  const out = process.stdout;
+  const project = path.basename(repoPath);
 
-  // Print a line above the prompt without eating the user's in-progress input.
-  const log = (line: string) => {
-    readline.clearLine(process.stdout, 0);
-    readline.cursorTo(process.stdout, 0);
-    process.stdout.write(line + "\n");
-    rl.prompt(true);
+  let state: PoolState = {
+    startedAt: Date.now(),
+    panes: crew.map((agent) => ({ agent, phase: "idle", lines: [], tokens: 0, completed: 0, failed: 0 })),
   };
-
-  let lastPhase = new Map<string, string>();
-  const onChange = (state: PoolState) => {
-    // Only announce phase transitions, so the log doesn't flood.
-    for (const pane of state.panes) {
-      const key = `${pane.phase}:${pane.taskId ?? ""}`;
-      if (lastPhase.get(pane.agent) !== key) {
-        lastPhase.set(pane.agent, key);
-        if (pane.phase === "working" && pane.taskId) {
-          log(`${CYAN}${pane.agent}${RESET} ${DIM}started ${pane.taskId}: ${pane.taskTitle ?? ""}${RESET}`);
-        } else if (pane.phase === "done" && pane.taskId) {
-          log(`${GREEN}${pane.agent}${RESET} ${DIM}finished ${pane.taskId}${RESET}`);
-        }
-      }
-    }
-  };
-  const onLine = (agent: string, taskId: string, event: AgentEvent) => {
-    if (event.kind === "text") log(`  ${CYAN}${agent}${RESET} ${event.text}`);
-    else if (event.kind === "tool") log(`  ${CYAN}${agent}${RESET} ${DIM}${event.detail}${RESET}`);
-    else if (event.kind === "result" && !event.ok) log(`  ${YELLOW}${agent}: ${event.summary}${RESET}`);
-  };
-
-  const session = startSession(repoPath, crew, config, { onChange, onLine });
-
-  process.stdout.write(
-    `${BOLD}WARDROOM${RESET} — conductor ready. Crew: ${crew.join(", ")}.\n` +
-      `${DIM}Type a command for the conductor, or /help. Ctrl-C or /quit to stop.${RESET}\n\n`
-  );
-  rl.prompt();
-
+  let input = "";
+  let busy: string | null = null;
+  let flash: NodeJS.Timeout | null = null;
   let stopping = false;
+
+  const session = startSession(repoPath, crew, config, {
+    onChange: (s) => { state = s; },
+  });
+
+  const draw = () => {
+    const cols = out.columns || 80;
+    const rows = out.rows || 24;
+    const tokens = state.panes.reduce((sum, p) => sum + p.tokens, 0);
+    const model: BridgeModel = { project, state, input, busy, tokens };
+    const { lines, cursorRow, cursorCol } = renderBridge(repoPath, model, cols, rows);
+    out.write(HIDE + HOME + lines.join("\r\n") + `\x1b[${cursorRow};${cursorCol}H` + SHOW);
+  };
+
+  const setFlash = (msg: string, ms = 2800) => {
+    busy = msg;
+    if (flash) clearTimeout(flash);
+    flash = setTimeout(() => { busy = null; flash = null; }, ms);
+  };
+
+  const timer = setInterval(draw, 120);
+
+  const cleanup = () => {
+    clearInterval(timer);
+    if (flash) clearTimeout(flash);
+    out.removeListener("resize", onResize);
+    if (process.stdin.isTTY) process.stdin.setRawMode(false);
+    process.stdin.pause();
+    out.write(SHOW + ALT_OFF);
+  };
+
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
-    process.stdout.write(`\n${DIM}stopping the crew...${RESET}\n`);
+    busy = "standing down the crew…";
+    draw();
     const result = await session.stop();
-    process.stdout.write(
-      `${result.completed} task(s) done, ${result.failed} failed this session` +
-        (result.writedownFile ? ` — writedown: ${result.writedownFile}` : "") +
+    cleanup();
+    out.write(
+      `wardroom · ${result.completed} done, ${result.failed} failed this session` +
+        (result.writedownFile ? ` — writedown ${result.writedownFile}` : "") +
         "\n"
     );
-    rl.close();
     process.exit(0);
   };
 
-  rl.on("line", async (raw) => {
-    const input = raw.trim();
-    if (!input) return rl.prompt();
+  function onResize() { out.write(CLEAR); draw(); }
 
-    if (input === "/quit" || input === "/exit") return void shutdown();
-    if (input === "/help") {
-      log(HELP);
-      return rl.prompt();
-    }
-    if (input === "/board") {
-      log(renderBoard(repoPath));
-      return rl.prompt();
-    }
-    if (input.startsWith("/say ")) {
-      const msg = input.slice(5).trim();
-      if (msg) {
-        sendMessage(repoPath, "captain", "all", msg);
-        log(`${DIM}(sent to crew)${RESET}`);
+  function onKey(str: string | undefined, key: readline.Key): void {
+    if (key && key.ctrl && key.name === "c") { void shutdown(); return; }
+    if (busy && !flash) return; // a command is being interpreted; only ctrl-c
+
+    if (key && (key.name === "return" || key.name === "enter")) {
+      const line = input.trim();
+      input = "";
+      if (!line) return;
+      if (line === "/quit" || line === "/exit") { void shutdown(); return; }
+      if (line.startsWith("/say ")) {
+        const msg = line.slice(5).trim();
+        if (msg) sendMessage(repoPath, "captain", "all", msg);
+        return;
       }
-      return rl.prompt();
+      if (flash) { clearTimeout(flash); flash = null; }
+      busy = "conductor · interpreting…";
+      session
+        .command(line)
+        .then(({ created, note }) => {
+          if (created.length === 0 && note) setFlash("conductor · " + note);
+          else busy = null;
+        })
+        .catch((e) => setFlash("conductor error · " + (e instanceof Error ? e.message : String(e)), 3500));
+      return;
     }
+    if (key && (key.name === "backspace" || key.name === "delete")) { input = input.slice(0, -1); return; }
+    if (str && !key?.ctrl && !key?.meta && str >= " ") { input += str; return; }
+  }
 
-    // Otherwise: a command for the conductor.
-    log(`${DIM}conductor: interpreting...${RESET}`);
-    try {
-      const { created, note } = await session.command(input);
-      if (created.length > 0) {
-        log(`${GREEN}conductor dispatched ${created.length} task(s):${RESET}`);
-        for (const t of created) {
-          log(`  ${t.id} ${t.title}${t.assignee ? ` ${CYAN}@${t.assignee}${RESET}` : ""}`);
-        }
-      } else {
-        log(`${DIM}conductor: ${note ?? "nothing to do"}${RESET}`);
-      }
-    } catch (error) {
-      log(`${YELLOW}conductor error: ${error instanceof Error ? error.message : error}${RESET}`);
-    }
-    rl.prompt();
-  });
-
-  rl.on("SIGINT", () => void shutdown());
+  // ── terminal setup ────────────────────────────────────────────────────────
+  out.write(ALT_ON + CLEAR);
+  readline.emitKeypressEvents(process.stdin);
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.on("keypress", onKey);
+  out.on("resize", onResize);
+  process.on("SIGTERM", () => void shutdown());
+  draw();
 }
