@@ -181,7 +181,7 @@ export async function runPool(
               }
               if (phase === "done") pane.completed += 1;
               if (phase === "failed") pane.failed += 1;
-              if (phase === "idle") {
+              if (phase === "idle" || phase === "waiting") {
                 pane.taskId = undefined;
                 pane.taskTitle = undefined;
               }
