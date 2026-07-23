@@ -16,6 +16,7 @@ Summary:
 | P5 | Hardening: enforcement guard, lease heartbeats + presence, log/board compaction, token budgets, 1.0 package | Shipped |
 | P6 | Interactive conductor console: directed assignment, `delegate_task`, keep-alive session, conductor, `wardroom` REPL, `crew` | Shipped |
 | P7 | Change transparency: per-task change records (files, +/-, diff) surfaced via `changes` / `show` / board / writedown — stay in sync with the crew without gating autonomy | Shipped |
+| P12 (1-2 of 4) | Crew memory, propose-only: `remember` MCP tool, verified + footprint-scoped "Project brief" injected into every worker/conductor prompt, `wardroom memory` curation (list/pin/forget/--add). Consolidation + capture-loop remain | Shipped |
 
 ## Next: the parallelism track
 

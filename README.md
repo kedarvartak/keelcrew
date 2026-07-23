@@ -59,6 +59,7 @@ wardroom> also rate-limit login to 5/min      # keep commanding, live
 | `wardroom changes` / `show <task>` | The receipts: what each task changed, and the full diff |
 | `wardroom crew` | Roster check: installed, authenticated, ready |
 | `wardroom board` / `log` / `say` / `watch` | Inspect the board, tail events, message the crew, live dashboard |
+| `wardroom memory` | The crew's shared brief: decisions, conventions, gotchas — injected into every prompt, verified so it can't rot; `pin` / `forget` / `--add` to curate |
 | `wardroom guard` / `compact` / `mcp` | Lease enforcement hook, log compaction, the MCP server itself |
 
 All coordination state lives in plain files under `.memo/` in your repo.

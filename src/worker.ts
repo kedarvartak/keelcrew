@@ -8,6 +8,7 @@ import type { WardroomConfig } from "./config.ts";
 import { claimFiles } from "./claims.ts";
 import { getContext } from "./context.ts";
 import { changeStat, diffOf, footprintTelemetry } from "./git.ts";
+import { memoryBrief } from "./memory.ts";
 import { getMessages } from "./messages.ts";
 import { heartbeat } from "./presence.ts";
 import {
@@ -89,6 +90,7 @@ function buildPrompt(repoPath: string, agent: string, task: Task): string {
     inbox.messages.length > 0
       ? inbox.messages.map((m) => `- from ${m.from} [${m.kind}, thread t${m.thread}]: ${m.body}`).join("\n")
       : "(empty)";
+  const brief = memoryBrief(repoPath, task.files.length > 0 ? task.files : undefined);
 
   return [
     `You are "${agent}", one worker in a crew of coding agents sharing this checkout.`,
@@ -101,6 +103,7 @@ function buildPrompt(repoPath: string, agent: string, task: Task): string {
       ? `Files you may modify (already leased to you): ${task.files.join(", ")}. Do not modify files outside this footprint.`
       : `This task modifies no files (research/review). Do not modify any files.`,
     ``,
+    ...(brief ? [`## Project brief — follow these`, brief, ``] : []),
     `## Unread messages addressed to you`,
     inboxBlock,
     ``,

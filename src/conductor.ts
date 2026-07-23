@@ -5,6 +5,7 @@ import { parseGeminiLine } from "./adapters/gemini.ts";
 import { spawnCli } from "./adapters/runner.ts";
 import type { LineParser } from "./adapters/types.ts";
 import type { WardroomConfig } from "./config.ts";
+import { memoryBrief } from "./memory.ts";
 import { parseTaskPlan } from "./planner.ts";
 import { listTasks, planTasks, type Task, type TaskInput } from "./tasks.ts";
 
@@ -45,6 +46,7 @@ function boardSummary(repoPath: string): string {
 }
 
 function conductorPrompt(command: string, crew: string[], repoPath: string): string {
+  const brief = memoryBrief(repoPath);
   return [
     `You are the conductor of a crew of coding agents (${crew.join(", ")}) sharing one checkout.`,
     `The captain just gave you a command. Turn it into tasks for the crew and STOP.`,
@@ -52,6 +54,7 @@ function conductorPrompt(command: string, crew: string[], repoPath: string): str
     `## Command`,
     command,
     ``,
+    ...(brief ? [`## Project brief (crew memory — respect it when planning)`, brief, ``] : []),
     `## Current open board (extend it; do not recreate existing tasks)`,
     boardSummary(repoPath),
     ``,

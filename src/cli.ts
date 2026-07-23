@@ -2,6 +2,7 @@
 import fs from "fs";
 import path from "path";
 import readline from "readline/promises";
+import { forgetMemory, listMemory, pinMemory, remember, type MemoryKind } from "./memory.ts";
 import { sendMessage, MESSAGE_KINDS, type MessageKind } from "./messages.ts";
 import { planTasks, renderBoard, type TaskInput } from "./tasks.ts";
 import { renderDashboard, renderLog } from "./renderer.ts";
@@ -36,6 +37,9 @@ commands:
                           send a message as the captain (default to: all)
   guard --agent NAME      enforcement hook: reads a tool call on stdin and
                           blocks edits to files another agent has leased
+  memory [pin|forget ID] [--add "<text>" --kind KIND [--files a,b] [--verify CMD]]
+                          the crew's shared brief: list items, pin (never
+                          decays), forget, or add one as the captain
   compact                 archive old events/messages/tasks under .memo/archive
   help                    show this help
 
@@ -253,6 +257,40 @@ function cmdSay(repo: string, args: string[]): void {
   }
   const message = sendMessage(repo, "captain", to, body, kind, thread);
   process.stdout.write(`sent #${message.seq} captain -> ${message.to} (thread t${message.thread})\n`);
+}
+
+function cmdMemory(repo: string, args: string[]): void {
+  const sub = args[0];
+  if (sub === "pin" || sub === "forget") {
+    const id = args[1];
+    if (!id) throw new Error(`usage: wardroom memory ${sub} <mem-id>`);
+    if (sub === "pin") {
+      const item = pinMemory(repo, id);
+      process.stdout.write(`pinned ${item.id}: ${item.text}\n`);
+    } else {
+      forgetMemory(repo, id);
+      process.stdout.write(`forgot ${id}\n`);
+    }
+    return;
+  }
+  const add = flagValue(args, "--add");
+  if (add !== undefined) {
+    const kind = (flagValue(args, "--kind") ?? "convention") as MemoryKind;
+    const files = flagValue(args, "--files")?.split(",").map((f) => f.trim()).filter(Boolean);
+    const item = remember(repo, { text: add, kind, source: "captain", files, verify: flagValue(args, "--verify") });
+    process.stdout.write(`remembered ${item.id} [${item.kind}] ${item.text}\n`);
+    return;
+  }
+  const items = listMemory(repo);
+  if (items.length === 0) {
+    process.stdout.write("crew memory is empty — agents propose via the `remember` tool; add one with --add\n");
+    return;
+  }
+  for (const item of items) {
+    const scope = item.files?.length ? `  files: ${item.files.join(", ")}` : "";
+    const flags = `${item.pinned ? " pinned" : ""} conf ${item.confidence.toFixed(2)}`;
+    process.stdout.write(`${item.id}  [${item.kind}]${flags}  (${item.source})\n  ${item.text}${scope ? `\n${scope}` : ""}\n`);
+  }
 }
 
 function poolSummary(result: {
@@ -487,6 +525,9 @@ async function main(): Promise<void> {
     case "guard":
       await cmdGuard(args);
       return;
+    case "memory":
+      cmdMemory(repoPath(), args);
+      return;
     case "compact":
       await cmdCompact(repoPath());
       return;
@@ -506,6 +547,12 @@ async function main(): Promise<void> {
       process.exitCode = 1;
   }
 }
+
+// Piping output into `head`/`less -q` closes stdout early; that is not an error.
+process.stdout.on("error", (e: NodeJS.ErrnoException) => {
+  if (e.code === "EPIPE") process.exit(0);
+  throw e;
+});
 
 main().catch((error) => {
   process.stderr.write(`wardroom: ${error instanceof Error ? error.message : String(error)}\n`);
