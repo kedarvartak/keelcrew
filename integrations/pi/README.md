@@ -1,38 +1,66 @@
-# wardroom × pi
+# wardroom × pi — the multi-agent harness inside pi
 
-Make a [pi](https://pi.dev) session a first-class member of a wardroom crew:
-same board, same file leases, same crew mail as the headless Claude/Codex
-workers `wardroom` runs in another terminal.
+This extension puts wardroom's whole multi-agent capability inside a
+[pi](https://pi.dev) session. Pi is the harness: it spawns and supervises
+the headless crew (Claude Code, Codex, ...) on the current checkout, takes
+your conductor orders, and controls the crew live. The wardroom CLI is not
+involved — `wardroom.json` and the `.memo/` state files are the only shared
+ground.
 
 ## Install
 
 ```bash
-npm install wardroom          # in your project
+npm install wardroom          # in your project (also provides the engine)
 mkdir -p .pi/extensions
 cp node_modules/wardroom/integrations/pi/wardroom-pi.ts .pi/extensions/
 ```
 
-pi loads extensions via jiti — no build step. Set `WARDROOM_AGENT` to name
-the pi seat (defaults to `pi`), and add it to the roster in `wardroom.json`
-if you want the conductor to be able to direct tasks at it.
+pi loads extensions via jiti — no build step. Put a `wardroom.json` at the
+repo root (roster of agent CLIs, conductor, review policy); the starter one
+from the wardroom repo works as-is.
 
-## What it adds
+## Running a crew from pi
 
-| Layer | Mechanism | Effect |
-|-------|-----------|--------|
-| Tools | `registerTool` | `wardroom_context`, `wardroom_claim_next`, `wardroom_complete` / `wardroom_fail`, `wardroom_plan`, `wardroom_send` / `wardroom_inbox`, `wardroom_remember` — pi's LLM coordinates through the shared board |
-| Guard | `tool_call` event | Edits to files another agent holds a lease on are **blocked**, with the holder and expiry in the refusal — enforcement, not advisory |
-| Context | `before_agent_start` | The crew protocol line and the verified Project Brief (crew memory) ride into every turn |
-| Commands | `registerCommand` | `/board` and `/crosstalk` for the human |
+```
+/crew start                    spawn the keep-alive crew from wardroom.json
+/crew add a /login endpoint with JWT, and tests for it
+                               anything that isn't a subcommand is a conductor
+                               order -> live board tasks, dispatched to the crew
+/crew status                   who is doing what right now
+/crew log                      task lifecycle + crosstalk since you last looked
+/crew hire claude-2            add an agent mid-run (vendor preset inferred; persisted)
+/crew drop codex               stand one down (finishes in-flight work first)
+/crew stop                     drain, stand down, writedown receipt
+/board  /crosstalk  /stats     the shared board, crew mail, parallelism report
+```
+
+The crew is stood down automatically when the pi session shuts down, so no
+claims are orphaned.
+
+## The pi session is also a crew seat
+
+- **Tools** (`wardroom_context`, `wardroom_claim_next`, `wardroom_complete`
+  / `wardroom_fail`, `wardroom_plan`, `wardroom_send` / `wardroom_inbox`,
+  `wardroom_remember`): pi's own LLM can claim board tasks, delegate to the
+  headless crew, answer questions, and propose crew memory.
+- **Enforced leases**: pi's `tool_call` event **blocks** edits to files a
+  crew agent holds a lease on — the refusal names the holder, reason, and
+  expiry. Enforcement, not advisory.
+- **Injected brief**: every pi turn carries the crew protocol line and the
+  verified Project Brief (crew memory).
+
+Set `WARDROOM_AGENT` to name the pi seat (defaults to `pi`).
 
 ## Status
 
 Working skeleton, written against pi-mono main as of 2026-07 (extensions
 API: [docs](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md)).
-The tool/guard layers use documented, stable surfaces; the context-injection
-and command-output calls are defensive (`appendSystemPrompt` falling back to
+The engine (session/pool/conductor via `wardroom/harness`) and the tool +
+guard layers use documented, stable surfaces; context injection and command
+output are written defensively (`appendSystemPrompt` falling back to
 `systemPrompt`, `ctx.print` falling back to `ctx.ui.notify`) and may need a
-one-line adjustment as pi's API evolves. Typical workflow: run `wardroom`
-(the conductor console + headless crew) in one terminal, pi in another —
-the pi seat claims work, gets blocked from leased files, and shows up in
-crosstalk like any other agent.
+one-line adjustment as pi's API evolves. The full flow — `/crew start`,
+conductor dispatch to parallel workers, status/board, the lease guard
+blocking an edit, `/crew stop` with receipt — is exercised end to end
+against a scripted mock of the pi API; a live pi install has not been
+tested yet.

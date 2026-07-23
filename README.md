@@ -91,12 +91,16 @@ is in [docs/setup.md](docs/setup.md).
 
 ## Embedding in other harnesses
 
-The coordination core is importable — `import { claimNextTask } from
-"wardroom/core"` — so other harnesses can join a crew natively. First
-integration: a [pi](https://pi.dev) extension
-([integrations/pi](integrations/pi)) that gives a pi session the crew tools,
-**enforced** file leases (pi's `tool_call` event blocks edits to files a
-peer holds), the injected crew brief, and `/board` / `/crosstalk` commands.
+Wardroom is a library before it is a CLI: `wardroom/core` is the
+coordination protocol (board, leases, messages, memory) and
+`wardroom/harness` is the engine that runs a crew over it (config, session,
+pool, conductor). First integration: a [pi](https://pi.dev) extension
+([integrations/pi](integrations/pi)) that embeds the whole harness in a pi
+session — `/crew start` spawns the headless workers from inside pi,
+`/crew <order>` is the conductor, and pi's own agent joins the crew with
+**enforced** file leases (its `tool_call` event blocks edits to files a
+peer holds). Our CLI is just the reference frontend for the same two
+libraries.
 
 ## Documentation
 
