@@ -21,6 +21,7 @@ import {
   releaseTask,
   renderBoard,
 } from "./tasks.ts";
+import { MEMORY_KINDS, remember } from "./memory.ts";
 import { getMessages, sendMessage, MESSAGE_KINDS } from "./messages.ts";
 import { readMemo, writeSession } from "./writedown.ts";
 
@@ -359,6 +360,30 @@ const tools = [
     },
   },
   {
+    name: "remember",
+    description:
+      "Propose a durable crew-memory item: a decision, convention, or gotcha every agent working this repo must respect. It is injected into all future worker/conductor prompts (scoped to file footprint, verified before injection), so only propose facts that should bind the whole crew — not session notes (use write_session) or task results (use complete_task). Optionally attach a shell `verify` predicate (exit 0 = still true) so the item self-prunes when it goes stale.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...repoPathProp,
+        ...agentProp,
+        text: { type: "string", description: "The fact, one line, imperative where possible (e.g. 'validate all request bodies with zod')." },
+        kind: { type: "string", enum: ["decision", "convention", "gotcha"], description: "decision = chosen direction; convention = how code is written here; gotcha = trap that costs time." },
+        files: {
+          type: "array",
+          items: { type: "string" },
+          description: "Paths/globs this applies to. Omit for repo-wide items.",
+        },
+        verify: {
+          type: "string",
+          description: "Optional shell predicate run from the repo root; exit 0 means the item still holds (e.g. `grep -q zod package.json`).",
+        },
+      },
+      required: ["repo_path", "agent", "text", "kind"],
+    },
+  },
+  {
     name: "read_memo",
     description:
       "Manually load prior context into the current chat. Triggered by the user (e.g. /readmemo). Returns the latest N session writedowns in full plus an index of all sessions on file. Use this at the start of a fresh chat to recover where work left off.",
@@ -608,6 +633,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         parsed.content,
         parsed.summary
       );
+    } else if (name === "remember") {
+      const parsed = z
+        .object({
+          repo_path: z.string(),
+          agent: z.string(),
+          text: z.string(),
+          kind: z.enum(MEMORY_KINDS),
+          files: z.array(z.string()).optional(),
+          verify: z.string().optional(),
+        })
+        .parse(args);
+      result = remember(parsed.repo_path, {
+        text: parsed.text,
+        kind: parsed.kind,
+        source: parsed.agent,
+        files: parsed.files,
+        verify: parsed.verify,
+      });
     } else if (name === "read_memo") {
       const parsed = z
         .object({ repo_path: z.string(), last_n: z.number().int().positive().optional() })

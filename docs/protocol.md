@@ -68,6 +68,19 @@ files touched, current state, next steps, blockers) via `write_session`.
 That snapshot — not your chat history — is what the next session cold-starts
 from.
 
+### 5. Crew memory: `remember`
+When you learn something every agent working this repo must respect — a
+decision ("auth uses JWT, not sessions"), a convention ("validate request
+bodies with zod"), or a gotcha ("the seed script wipes local fixtures") —
+propose it with `remember`. It is injected into every future worker and
+conductor prompt as the "Project brief", scoped to file footprint and
+verified before injection, so propose only durable, repo-binding facts:
+not session notes (writedowns), not task results (`complete_task`).
+Attach a `verify` shell predicate when you can (e.g.
+`grep -q zod package.json`) — items that stop verifying are decayed and
+pruned instead of rotting. The human curates with `wardroom memory`
+(list / pin / forget).
+
 ## Rules of the road
 
 1. **No un-leased edits.** Every file you modify is covered by either your
