@@ -1,18 +1,14 @@
-```
-                        _
+
+<div align="center"><pre>
+```                    _
 __      ____ _ _ __ __| |_ __ ___   ___  _ __ ___
 \ \ /\ / / _` | '__/ _` | '__/ _ \ / _ \| '_ ` _ \
  \ V  V / (_| | | | (_| | | | (_) | (_) | | | | | |
   \_/\_/ \__,_|_|  \__,_|_|  \___/ \___/|_| |_| |_|
 ```
+</pre>
 
-> Fire-and-forget a crew of coding agents on one checkout — and always have
-> the receipts.
-
-![npm](https://img.shields.io/npm/v/wardroom?style=flat-square&color=black)
-![license](https://img.shields.io/npm/l/wardroom?style=flat-square&color=black)
-![node](https://img.shields.io/node/v/wardroom?style=flat-square&color=black)
-![mcp](https://img.shields.io/badge/MCP-compatible-black?style=flat-square)
+![wardroom demo](docs/demo.gif)
 
 Claude Code and Codex run themselves in one terminal, in parallel, on the
 same working tree — no worktrees, no merge step. You command a conductor;
@@ -20,7 +16,7 @@ it dispatches the crew on a live task board; the agents delegate, question,
 and review each other as they go. Every task records exactly what it
 changed, so you stay in sync without gating the autonomy.
 
-![wardroom demo](docs/demo.gif)
+
 
 ## Why
 
