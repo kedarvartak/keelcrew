@@ -17,6 +17,20 @@ Summary:
 | P6 | Interactive conductor console: directed assignment, `delegate_task`, keep-alive session, conductor, `wardroom` REPL, `crew` | Shipped |
 | P7 | Change transparency: per-task change records (files, +/-, diff) surfaced via `changes` / `show` / board / writedown — stay in sync with the crew without gating autonomy | Shipped |
 
+## Next: the parallelism track
+
+The product thesis in [why-parallel.md](why-parallel.md) sets the next
+builds, alongside the recovery/cost/verification work planned in
+[unsolved-issues.md](unsolved-issues.md) (P8-P13):
+
+| Item | Scope | Serves |
+|------|-------|--------|
+| Sweep primitive | `wardroom sweep "<instruction>" --per <dir\|glob>`: one instruction fans out into N disjoint-footprint tasks for the whole crew | Broad-shallow write work |
+| Cross-vendor failover | Rate-limited agent's pending tasks re-route to peers and back; quota/cost-aware routing of grunt work to the cheap model | Quota parallelism, model arbitrage |
+| Live event push | Lease renewal delivers fresh peer events into a running task (mid-task for Claude via stream-json; next boundary for one-shot CLIs) | Continuous integration between peers |
+| Divergent attempts | Same hard task to both models on scratch branches; supervisor lands the winner | Cross-model diversity |
+| Supervisor mode | `role: supervisor \| implementor`; a resident supervisor session that plans, dispatches, answers questions live, reviews, and files fix-up tasks | The brain on top of all four |
+
 ## History
 
 - v0.1 was `multi-agent-memo`: a shared append-only `AGENTS.md` line log.

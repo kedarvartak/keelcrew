@@ -20,6 +20,10 @@ game against Anthropic and Cursor. The question is: **what strong, opinionated
 bet can wardroom make that the field hasn't — and that developers are actively
 asking for?** This doc answers that from evidence, not taste.
 
+The conclusions here are distilled into the product thesis in
+[why-parallel.md](why-parallel.md) — when parallel agents beat one agent,
+the four use cases wardroom lives for, and the build list that follows.
+
 ---
 
 ## 1. What "truly different" looks like: Pi as the reference
